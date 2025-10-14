@@ -1,282 +1,252 @@
 /**
- * Authentication Service
+ * Authentication Service Module
  * 
- * Provides comprehensive authentication business logic including user registration,
- * login, token management, password reset, and account lockout functionality.
- * Implements security best practices with bcrypt password hashing, JWT token
- * generation, and protection against brute force attacks.
+ * Comprehensive authentication service handling user registration, login,
+ * token management, password reset, and account security features.
+ * Implements secure authentication flows with proper error handling,
+ * logging, and audit trails.
  * 
  * @module services/auth
  */
 
-import { randomBytes } from 'crypto';
-
-import { executeQuery, executeTransaction, queryOne } from '../db/index.js';
-import { type UserRole } from '../types/index.js';
+import { Pool } from 'pg';
 import {
-  type AuthenticatedUser,
-  type AuthResponse,
-  type LoginCredentials,
-  type PasswordResetConfirmation,
-  type PasswordResetRequest,
-  type PasswordResetTokenPayload,
-  type RegisterData,
-  type TokenPair,
+  User,
+  LoginCredentials,
+  RegisterData,
+  AuthTokens,
+  TokenPayload,
+  RefreshTokenPayload,
+  PasswordResetRequest,
+  PasswordResetConfirmation,
+  ChangePasswordRequest,
+  AccountLockoutInfo,
+  AuthError,
+  AuthErrorCode,
 } from '../types/auth.js';
-import { hashPassword, comparePassword, validatePassword } from '../utils/password.js';
 import {
-  generateAccessToken,
-  generateRefreshToken,
+  generateToken,
+  verifyToken,
   verifyRefreshToken,
-  generatePasswordResetToken,
-  verifyPasswordResetToken,
 } from '../utils/jwt.js';
-import { getJWTConfig } from '../config/auth.js';
+import {
+  hashPassword,
+  comparePassword,
+  validatePassword,
+} from '../utils/password.js';
+import {
+  getAuthConfig,
+  getAccountLockoutConfig,
+  getPasswordResetConfig,
+} from '../config/auth.js';
+import { randomBytes } from 'crypto';
+import { promisify } from 'util';
+
+const randomBytesAsync = promisify(randomBytes);
 
 /**
- * Database user record structure
+ * Generate a cryptographically secure random token
  */
-interface UserRecord {
-  readonly id: string;
-  readonly email: string;
-  readonly password_hash: string;
-  readonly first_name: string;
-  readonly last_name: string;
-  readonly role: UserRole;
-  readonly is_active: boolean;
-  readonly failed_login_attempts: number;
-  readonly locked_until: Date | null;
-  readonly created_at: Date;
-  readonly updated_at: Date;
+async function generateSecureToken(length: number = 32): Promise<string> {
+  const buffer = await randomBytesAsync(length);
+  return buffer.toString('hex');
 }
 
 /**
- * Token blacklist record structure
+ * Custom error class for authentication errors
  */
-interface TokenBlacklistRecord {
-  readonly token_id: string;
-  readonly user_id: string;
-  readonly expires_at: Date;
-  readonly blacklisted_at: Date;
-}
+export class AuthenticationError extends Error implements AuthError {
+  public readonly code: AuthErrorCode;
+  public readonly statusCode: number;
+  public readonly details?: Record<string, unknown>;
+  public readonly timestamp: Date;
+  public readonly correlationId?: string;
 
-/**
- * Password reset token record structure
- */
-interface PasswordResetTokenRecord {
-  readonly token_id: string;
-  readonly user_id: string;
-  readonly expires_at: Date;
-  readonly used: boolean;
-  readonly created_at: Date;
-}
-
-/**
- * Authentication service error codes
- */
-export enum AuthErrorCode {
-  INVALID_CREDENTIALS = 'INVALID_CREDENTIALS',
-  ACCOUNT_LOCKED = 'ACCOUNT_LOCKED',
-  ACCOUNT_INACTIVE = 'ACCOUNT_INACTIVE',
-  EMAIL_ALREADY_EXISTS = 'EMAIL_ALREADY_EXISTS',
-  INVALID_TOKEN = 'INVALID_TOKEN',
-  TOKEN_EXPIRED = 'TOKEN_EXPIRED',
-  TOKEN_BLACKLISTED = 'TOKEN_BLACKLISTED',
-  PASSWORD_RESET_TOKEN_INVALID = 'PASSWORD_RESET_TOKEN_INVALID',
-  PASSWORD_RESET_TOKEN_USED = 'PASSWORD_RESET_TOKEN_USED',
-  USER_NOT_FOUND = 'USER_NOT_FOUND',
-  WEAK_PASSWORD = 'WEAK_PASSWORD',
-  VALIDATION_ERROR = 'VALIDATION_ERROR',
-}
-
-/**
- * Authentication service error
- */
-export class AuthServiceError extends Error {
   constructor(
     message: string,
-    public readonly code: AuthErrorCode,
-    public readonly details?: Record<string, unknown>
+    code: AuthErrorCode,
+    statusCode: number = 401,
+    details?: Record<string, unknown>,
+    correlationId?: string
   ) {
     super(message);
-    this.name = 'AuthServiceError';
+    this.name = 'AuthenticationError';
+    this.code = code;
+    this.statusCode = statusCode;
+    this.details = details;
+    this.timestamp = new Date();
+    this.correlationId = correlationId;
+
+    // Maintain proper stack trace
+    Error.captureStackTrace(this, this.constructor);
   }
 }
 
 /**
- * Account lockout configuration
- */
-const LOCKOUT_CONFIG = {
-  MAX_FAILED_ATTEMPTS: 5,
-  LOCKOUT_DURATION_MS: 30 * 60 * 1000, // 30 minutes
-} as const;
-
-/**
- * Generate correlation ID for request tracing
+ * Generate correlation ID for request tracking
  */
 function generateCorrelationId(): string {
-  return `auth_${Date.now()}_${randomBytes(8).toString('hex')}`;
+  return `auth-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 }
 
 /**
- * Authentication Service
+ * Authentication Service Class
  * 
- * Provides all authentication-related business logic including:
- * - User registration with password hashing
- * - Login with credential validation and token generation
- * - Token refresh mechanism
- * - Logout with token blacklisting
- * - Password reset flow
+ * Provides comprehensive authentication functionality including:
+ * - User registration and login
+ * - Token generation and verification
+ * - Password reset flows
  * - Account lockout protection
+ * - Session management
+ * - Audit logging
  */
 export class AuthService {
+  private readonly db: Pool;
+  private readonly config: ReturnType<typeof getAuthConfig>;
+
+  constructor(db: Pool) {
+    this.db = db;
+    this.config = getAuthConfig();
+
+    console.log('[AUTH_SERVICE] Authentication service initialized', {
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   /**
    * Register a new user
    * 
-   * Creates a new user account with hashed password. Validates that email
-   * is unique and password meets strength requirements.
-   * 
+   * Creates a new user account with the provided registration data.
+   * Validates input, checks for existing users, hashes password, and
+   * creates the user record in the database.
+      * 
    * @param data - User registration data
-   * @param options - Optional operation options
-   * @returns Authentication response with tokens and user info
-   * @throws AuthServiceError if registration fails
+   * @param options - Optional registration options
+   * @returns Created user object and authentication tokens
+   * @throws {AuthenticationError} If registration fails
+   * 
+   * @example
+   * ```typescript
+   * const result = await authService.register({
+   *   email: 'user@example.com',
+   *   password: 'SecurePass123!',
+   *   firstName: 'John',
+   *   lastName: 'Doe'
+   * });
+   * ```
    */
   async register(
     data: RegisterData,
     options?: {
+      readonly skipEmailVerification?: boolean;
       readonly correlationId?: string;
     }
-  ): Promise<AuthResponse> {
+  ): Promise<{ user: User; tokens: AuthTokens }> {
     const correlationId = options?.correlationId ?? generateCorrelationId();
     const startTime = Date.now();
 
     try {
       console.log('[AUTH_SERVICE] Starting user registration:', {
         email: data.email,
-        role: data.role,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(data.email)) {
-        throw new AuthServiceError(
-          'Invalid email format',
-          AuthErrorCode.VALIDATION_ERROR,
-          { field: 'email', correlationId }
-        );
-      }
-
-      // Validate password strength
+      // Validate password
       const passwordValidation = validatePassword(data.password);
       if (!passwordValidation.isValid) {
-        throw new AuthServiceError(
-          'Password does not meet strength requirements',
-          AuthErrorCode.WEAK_PASSWORD,
-          {
-            errors: passwordValidation.errors,
-            strengthScore: passwordValidation.strengthScore,
-            correlationId,
-          }
+        throw new AuthenticationError(
+          `Password validation failed: ${passwordValidation.errors.join(', ')}`,
+          'INVALID_PASSWORD',
+          400,
+          { errors: passwordValidation.errors, correlationId }
         );
       }
 
-      // Validate name fields
-      if (!data.firstName || data.firstName.trim().length === 0) {
-        throw new AuthServiceError(
-          'First name is required',
-          AuthErrorCode.VALIDATION_ERROR,
-          { field: 'firstName', correlationId }
+      // Check password strength
+      if (passwordValidation.strengthScore < 3) {
+        throw new AuthenticationError(
+          'Password is too weak. Please use a stronger password.',
+          'WEAK_PASSWORD',
+          400,
+          { strengthScore: passwordValidation.strengthScore, correlationId }
         );
       }
 
-      if (!data.lastName || data.lastName.trim().length === 0) {
-        throw new AuthServiceError(
-          'Last name is required',
-          AuthErrorCode.VALIDATION_ERROR,
-          { field: 'lastName', correlationId }
-        );
-      }
-
-      // Check if email already exists
-      const existingUser = await queryOne<UserRecord>(
+      // Check if user already exists
+      const existingUser = await this.db.query(
         'SELECT id FROM users WHERE email = $1',
-        [data.email.toLowerCase()],
-        { correlationId, operation: 'check_email_exists' }
+        [data.email.toLowerCase()]
       );
 
-      if (existingUser) {
-        console.warn('[AUTH_SERVICE] Registration failed: Email already exists', {
-          email: data.email,
-          correlationId,
-          timestamp: new Date().toISOString(),
-        });
-
-        throw new AuthServiceError(
-          'Email address is already registered',
-          AuthErrorCode.EMAIL_ALREADY_EXISTS,
+      if (existingUser.rows.length > 0) {
+        throw new AuthenticationError(
+          'User with this email already exists',
+          'USER_EXISTS',
+          409,
           { email: data.email, correlationId }
         );
       }
 
-      // Hash password - returns string directly
+      // Hash password
       const passwordHash = await hashPassword(data.password);
 
-      // Create user in transaction
-      const user = await executeTransaction<UserRecord>(
-        async (client) => {
-          const result = await client.query<UserRecord>(
-            `INSERT INTO users (
-              email, password_hash, first_name, last_name, role, 
-              is_active, failed_login_attempts, locked_until
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING *`,
-            [
-              data.email.toLowerCase(),
-              passwordHash,
-              data.firstName.trim(),
-              data.lastName.trim(),
-              data.role,
-              true, // is_active
-              0, // failed_login_attempts
-              null, // locked_until
-            ]
-          );
-
-          if (result.rows.length === 0) {
-            throw new Error('Failed to create user record');
-          }
-
-          return result.rows[0]!;
-        },
-        { correlationId, operation: 'register_user' }
+      // Create user
+      const result = await this.db.query(
+        `INSERT INTO users (
+          email, password_hash, first_name, last_name, role,
+          is_active, email_verified, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+        RETURNING id, email, first_name, last_name, role, is_active, email_verified, created_at, updated_at`,
+        [
+          data.email.toLowerCase(),
+          passwordHash,
+          data.firstName,
+          data.lastName,
+          data.role || 'employee',
+          true,
+          options?.skipEmailVerification ?? false,
+        ]
       );
 
+      const user: User = {
+        id: result.rows[0].id,
+        email: result.rows[0].email,
+        firstName: result.rows[0].first_name,
+        lastName: result.rows[0].last_name,
+        role: result.rows[0].role,
+        isActive: result.rows[0].is_active,
+        emailVerified: result.rows[0].email_verified,
+        createdAt: result.rows[0].created_at,
+        updatedAt: result.rows[0].updated_at,
+      };
+
       // Generate tokens
-      const tokens = await this.generateTokenPair(user, { correlationId });
+      const tokens = await this.generateAuthTokens(user, { correlationId });
+
+      // Log successful registration
+      await this.logAuthEvent(
+        user.id,
+        'REGISTER',
+        true,
+        { correlationId }
+      );
 
       const executionTimeMs = Date.now() - startTime;
 
-      console.log('[AUTH_SERVICE] User registration completed successfully:', {
+      console.log('[AUTH_SERVICE] User registered successfully:', {
         userId: user.id,
         email: user.email,
-        role: user.role,
         executionTimeMs,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      return {
-        success: true,
-        tokens,
-        user: this.mapUserToAuthenticatedUser(user),
-        message: 'Registration successful',
-      };
+      return { user, tokens };
     } catch (error) {
       const executionTimeMs = Date.now() - startTime;
 
-      if (error instanceof AuthServiceError) {
+      if (error instanceof AuthenticationError) {
         console.error('[AUTH_SERVICE] Registration failed:', {
           error: error.message,
           code: error.code,
@@ -290,180 +260,207 @@ export class AuthService {
 
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      console.error('[AUTH_SERVICE] Unexpected registration error:', {
+      console.error('[AUTH_SERVICE] Unexpected error during registration:', {
         error: errorMessage,
         executionTimeMs,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      throw new AuthServiceError(
-        `Registration failed: ${errorMessage}`,
-        AuthErrorCode.VALIDATION_ERROR,
-        { correlationId }
+      throw new AuthenticationError(
+        'Registration failed due to an unexpected error',
+        'REGISTRATION_FAILED',
+        500,
+        { originalError: errorMessage, correlationId }
       );
     }
   }
 
   /**
-   * Login user with credentials
+   * Authenticate user and generate tokens
    * 
-   * Validates user credentials, checks account status, and generates tokens.
-   * Implements account lockout protection against brute force attacks.
+   * Validates user credentials, checks account status and lockout,
+   * and generates authentication tokens on successful login.
    * 
    * @param credentials - User login credentials
-   * @param options - Optional operation options
-   * @returns Authentication response with tokens and user info
-   * @throws AuthServiceError if login fails
+   * @param options - Optional login options
+   * @returns User object and authentication tokens
+   * @throws {AuthenticationError} If authentication fails
+   * 
+   * @example
+   * ```typescript
+   * const result = await authService.login({
+   *   email: 'user@example.com',
+   *   password: 'SecurePass123!'
+   * });
+   * ```
    */
   async login(
     credentials: LoginCredentials,
     options?: {
-      readonly correlationId?: string;
       readonly ipAddress?: string;
       readonly userAgent?: string;
+      readonly correlationId?: string;
     }
-  ): Promise<AuthResponse> {
+  ): Promise<{ user: User; tokens: AuthTokens }> {
     const correlationId = options?.correlationId ?? generateCorrelationId();
     const startTime = Date.now();
 
     try {
-      console.log('[AUTH_SERVICE] Starting login attempt:', {
+      console.log('[AUTH_SERVICE] Starting user login:', {
         email: credentials.email,
         ipAddress: options?.ipAddress,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      // Validate input
-      if (!credentials.email || !credentials.password) {
-        throw new AuthServiceError(
-          'Email and password are required',
-          AuthErrorCode.VALIDATION_ERROR,
-          { correlationId }
-        );
-      }
-
-      // Find user by email
-      const user = await queryOne<UserRecord>(
-        'SELECT * FROM users WHERE email = $1',
-        [credentials.email.toLowerCase()],
-        { correlationId, operation: 'find_user_by_email' }
+      // Get user from database
+      const result = await this.db.query(
+        `SELECT id, email, password_hash, first_name, last_name, role,
+                is_active, email_verified, failed_login_attempts, locked_until,
+                created_at, updated_at
+         FROM users WHERE email = $1`,
+        [credentials.email.toLowerCase()]
       );
 
-      if (!user) {
-        console.warn('[AUTH_SERVICE] Login failed: User not found', {
-          email: credentials.email,
-          correlationId,
-          timestamp: new Date().toISOString(),
-        });
+      if (result.rows.length === 0) {
+        // Log failed attempt
+        await this.logAuthEvent(
+          null,
+          'LOGIN',
+          false,
+          {
+            email: credentials.email,
+            reason: 'USER_NOT_FOUND',
+            ipAddress: options?.ipAddress,
+            correlationId,
+          }
+        );
 
-        throw new AuthServiceError(
+        throw new AuthenticationError(
           'Invalid email or password',
-          AuthErrorCode.INVALID_CREDENTIALS,
+          'INVALID_CREDENTIALS',
+          401,
           { correlationId }
         );
       }
 
+      const userRow = result.rows[0];
+
       // Check if account is locked
-      if (user.locked_until && new Date(user.locked_until) > new Date()) {
-        const lockoutRemainingMs = new Date(user.locked_until).getTime() - Date.now();
-        const lockoutRemainingMinutes = Math.ceil(lockoutRemainingMs / 60000);
+      if (userRow.locked_until && new Date(userRow.locked_until) > new Date()) {
+        const lockoutInfo = await this.getAccountLockoutInfo(userRow.id);
 
-        console.warn('[AUTH_SERVICE] Login failed: Account locked', {
-          userId: user.id,
-          email: user.email,
-          lockedUntil: user.locked_until,
-          remainingMinutes: lockoutRemainingMinutes,
-          correlationId,
-          timestamp: new Date().toISOString(),
-        });
-
-        throw new AuthServiceError(
-          `Account is locked. Please try again in ${lockoutRemainingMinutes} minutes.`,
-          AuthErrorCode.ACCOUNT_LOCKED,
+        await this.logAuthEvent(
+          userRow.id,
+          'LOGIN',
+          false,
           {
-            lockedUntil: user.locked_until,
-            remainingMinutes: lockoutRemainingMinutes,
+            reason: 'ACCOUNT_LOCKED',
+            lockedUntil: userRow.locked_until,
+            ipAddress: options?.ipAddress,
             correlationId,
           }
+        );
+
+        throw new AuthenticationError(
+          'Account is temporarily locked due to too many failed login attempts',
+          'ACCOUNT_LOCKED',
+          423,
+          { lockoutInfo, correlationId }
         );
       }
 
       // Check if account is active
-      if (!user.is_active) {
-        console.warn('[AUTH_SERVICE] Login failed: Account inactive', {
-          userId: user.id,
-          email: user.email,
-          correlationId,
-          timestamp: new Date().toISOString(),
-        });
+      if (!userRow.is_active) {
+        await this.logAuthEvent(
+          userRow.id,
+          'LOGIN',
+          false,
+          {
+            reason: 'ACCOUNT_INACTIVE',
+            ipAddress: options?.ipAddress,
+            correlationId,
+          }
+        );
 
-        throw new AuthServiceError(
+        throw new AuthenticationError(
           'Account is inactive. Please contact support.',
-          AuthErrorCode.ACCOUNT_INACTIVE,
+          'ACCOUNT_INACTIVE',
+          403,
           { correlationId }
         );
       }
 
-      // Verify password - returns boolean directly
+      // Verify password
       const passwordMatch = await comparePassword(
         credentials.password,
-        user.password_hash
+        userRow.password_hash
       );
 
       if (!passwordMatch) {
         // Increment failed login attempts
-        await this.handleFailedLogin(user, { correlationId });
-
-        console.warn('[AUTH_SERVICE] Login failed: Invalid password', {
-          userId: user.id,
-          email: user.email,
-          failedAttempts: user.failed_login_attempts + 1,
+        await this.handleFailedLogin(userRow.id, {
+          ipAddress: options?.ipAddress,
           correlationId,
-          timestamp: new Date().toISOString(),
         });
 
-        throw new AuthServiceError(
+        throw new AuthenticationError(
           'Invalid email or password',
-          AuthErrorCode.INVALID_CREDENTIALS,
+          'INVALID_CREDENTIALS',
+          401,
           { correlationId }
         );
       }
 
       // Reset failed login attempts on successful login
-      if (user.failed_login_attempts > 0) {
-        await executeQuery(
-          'UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1',
-          [user.id],
-          { correlationId, operation: 'reset_failed_attempts' }
-        );
-      }
+      await this.db.query(
+        'UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW() WHERE id = $1',
+        [userRow.id]
+      );
+
+      const user: User = {
+        id: userRow.id,
+        email: userRow.email,
+        firstName: userRow.first_name,
+        lastName: userRow.last_name,
+        role: userRow.role,
+        isActive: userRow.is_active,
+        emailVerified: userRow.email_verified,
+        createdAt: userRow.created_at,
+        updatedAt: userRow.updated_at,
+      };
 
       // Generate tokens
-      const tokens = await this.generateTokenPair(user, { correlationId });
+      const tokens = await this.generateAuthTokens(user, { correlationId });
+
+      // Log successful login
+      await this.logAuthEvent(
+        user.id,
+        'LOGIN',
+        true,
+        {
+          ipAddress: options?.ipAddress,
+          userAgent: options?.userAgent,
+          correlationId,
+        }
+      );
 
       const executionTimeMs = Date.now() - startTime;
 
-      console.log('[AUTH_SERVICE] Login successful:', {
+      console.log('[AUTH_SERVICE] User logged in successfully:', {
         userId: user.id,
         email: user.email,
-        role: user.role,
         executionTimeMs,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      return {
-        success: true,
-        tokens,
-        user: this.mapUserToAuthenticatedUser(user),
-        message: 'Login successful',
-      };
+      return { user, tokens };
     } catch (error) {
       const executionTimeMs = Date.now() - startTime;
 
-      if (error instanceof AuthServiceError) {
+      if (error instanceof AuthenticationError) {
         console.error('[AUTH_SERVICE] Login failed:', {
           error: error.message,
           code: error.code,
@@ -477,17 +474,110 @@ export class AuthService {
 
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      console.error('[AUTH_SERVICE] Unexpected login error:', {
+      console.error('[AUTH_SERVICE] Unexpected error during login:', {
         error: errorMessage,
         executionTimeMs,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      throw new AuthServiceError(
-        `Login failed: ${errorMessage}`,
-        AuthErrorCode.INVALID_CREDENTIALS,
-        { correlationId }
+      throw new AuthenticationError(
+        'Login failed due to an unexpected error',
+        'LOGIN_FAILED',
+        500,
+        { originalError: errorMessage, correlationId }
+      );
+    }
+  }
+
+  /**
+   * Generate authentication tokens for a user
+   * 
+   * Creates both access and refresh tokens with appropriate expiration times.
+   * Stores refresh token in database for validation and revocation.
+   * 
+   * @param user - User object
+   * @param options - Optional token generation options
+   * @returns Authentication tokens
+   * 
+   * @example
+   * ```typescript
+   * const tokens = await authService.generateAuthTokens(user);
+   * ```
+   */
+  private async generateAuthTokens(
+    user: User,
+    options?: {
+      readonly correlationId?: string;
+    }
+  ): Promise<AuthTokens> {
+    const correlationId = options?.correlationId ?? generateCorrelationId();
+
+    try {
+      const tokenId = await generateSecureToken(16);
+
+      // Generate access token
+      const accessToken = generateToken(
+        {
+          userId: user.id,
+          email: user.email,
+          role: user.role,
+          tokenType: 'access' as const,
+        },
+        this.config.jwt.expiresIn
+      );
+
+      // Generate refresh token with tokenId
+      const refreshToken = generateToken(
+        {
+          userId: user.id,
+          email: user.email,
+          tokenId,
+          tokenType: 'refresh' as const,
+        },
+        this.config.jwt.refreshExpiresIn
+      );
+
+      // Store refresh token in database
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7); // 7 days from now
+
+      await this.db.query(
+        `INSERT INTO refresh_tokens (user_id, token_id, expires_at, created_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (user_id, token_id) DO UPDATE
+         SET expires_at = EXCLUDED.expires_at, created_at = NOW()`,
+        [user.id, tokenId, expiresAt]
+      );
+
+      console.log('[AUTH_SERVICE] Tokens generated successfully:', {
+        userId: user.id,
+        tokenId,
+        correlationId,
+        timestamp: new Date().toISOString(),
+      });
+
+      return {
+        accessToken,
+        refreshToken,
+        expiresIn: this.config.jwt.expiresIn,
+        tokenType: 'Bearer',
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      console.error('[AUTH_SERVICE] Error generating tokens:', {
+        error: errorMessage,
+        userId: user.id,
+        correlationId,
+        timestamp: new Date().toISOString(),
+      });
+
+      throw new AuthenticationError(
+        'Failed to generate authentication tokens',
+        'TOKEN_GENERATION_FAILED',
+        500,
+        { originalError: errorMessage, correlationId }
       );
     }
   }
@@ -495,20 +585,26 @@ export class AuthService {
   /**
    * Refresh access token using refresh token
    * 
-   * Validates refresh token and generates new access token. Refresh token
-   * remains valid and can be reused until expiration.
+   * Validates refresh token and generates new access token.
+   * Optionally rotates refresh token for enhanced security.
    * 
-   * @param refreshToken - Valid refresh token
-   * @param options - Optional operation options
-   * @returns New token pair
-   * @throws AuthServiceError if refresh fails
+   * @param refreshToken - Refresh token
+   * @param options - Optional refresh options
+   * @returns New authentication tokens
+   * @throws {AuthenticationError} If refresh fails
+   * 
+   * @example
+   * ```typescript
+   * const tokens = await authService.refreshToken(oldRefreshToken);
+   * ```
    */
   async refreshToken(
     refreshToken: string,
     options?: {
+      readonly rotateRefreshToken?: boolean;
       readonly correlationId?: string;
     }
-  ): Promise<TokenPair> {
+  ): Promise<AuthTokens> {
     const correlationId = options?.correlationId ?? generateCorrelationId();
     const startTime = Date.now();
 
@@ -521,71 +617,106 @@ export class AuthService {
       // Verify refresh token
       const payload = verifyRefreshToken(refreshToken, { correlationId });
 
-      // Check if token is blacklisted
-      const isBlacklisted = await this.isTokenBlacklisted(payload.tokenId, {
-        correlationId,
-      });
-
-      if (isBlacklisted) {
-        console.warn('[AUTH_SERVICE] Token refresh failed: Token blacklisted', {
-          tokenId: payload.tokenId,
-          userId: payload.userId,
-          correlationId,
-          timestamp: new Date().toISOString(),
-        });
-
-        throw new AuthServiceError(
-          'Refresh token has been revoked',
-          AuthErrorCode.TOKEN_BLACKLISTED,
-          { tokenId: payload.tokenId, correlationId }
-        );
-      }
-
-      // Get user from database
-      const user = await queryOne<UserRecord>(
-        'SELECT * FROM users WHERE id = $1',
-        [payload.userId],
-        { correlationId, operation: 'find_user_by_id' }
+      // Check if refresh token exists in database
+      const tokenResult = await this.db.query(
+        `SELECT rt.id, rt.user_id, rt.revoked_at, rt.expires_at,
+                u.email, u.first_name, u.last_name, u.role, u.is_active, u.email_verified
+         FROM refresh_tokens rt
+         JOIN users u ON rt.user_id = u.id
+         WHERE rt.user_id = $1 AND rt.token_id = $2`,
+        [payload.userId, payload.tokenId]
       );
 
-      if (!user) {
-        console.error('[AUTH_SERVICE] Token refresh failed: User not found', {
-          userId: payload.userId,
-          correlationId,
-          timestamp: new Date().toISOString(),
-        });
-
-        throw new AuthServiceError(
-          'User not found',
-          AuthErrorCode.USER_NOT_FOUND,
-          { userId: payload.userId, correlationId }
-        );
-      }
-
-      // Check if account is active
-      if (!user.is_active) {
-        console.warn('[AUTH_SERVICE] Token refresh failed: Account inactive', {
-          userId: user.id,
-          email: user.email,
-          correlationId,
-          timestamp: new Date().toISOString(),
-        });
-
-        throw new AuthServiceError(
-          'Account is inactive',
-          AuthErrorCode.ACCOUNT_INACTIVE,
+      if (tokenResult.rows.length === 0) {
+        throw new AuthenticationError(
+          'Invalid refresh token',
+          'INVALID_TOKEN',
+          401,
           { correlationId }
         );
       }
 
-      // Generate new token pair
-      const tokens = await this.generateTokenPair(user, { correlationId });
+      const tokenRow = tokenResult.rows[0];
+
+      // Check if token is revoked
+      if (tokenRow.revoked_at) {
+        throw new AuthenticationError(
+          'Refresh token has been revoked',
+          'TOKEN_REVOKED',
+          401,
+          { revokedAt: tokenRow.revoked_at, correlationId }
+        );
+      }
+
+      // Check if token is expired
+      if (new Date(tokenRow.expires_at) < new Date()) {
+        throw new AuthenticationError(
+          'Refresh token has expired',
+          'TOKEN_EXPIRED',
+          401,
+          { expiredAt: tokenRow.expires_at, correlationId }
+        );
+      }
+
+      // Check if user is still active
+      if (!tokenRow.is_active) {
+        throw new AuthenticationError(
+          'User account is inactive',
+          'ACCOUNT_INACTIVE',
+          403,
+          { correlationId }
+        );
+      }
+
+      const user: User = {
+        id: tokenRow.user_id,
+        email: tokenRow.email,
+        firstName: tokenRow.first_name,
+        lastName: tokenRow.last_name,
+        role: tokenRow.role,
+        isActive: tokenRow.is_active,
+        emailVerified: tokenRow.email_verified,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      // Generate new tokens
+      let tokens: AuthTokens;
+
+      if (options?.rotateRefreshToken) {
+        // Revoke old refresh token
+        await this.db.query(
+          'UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1',
+          [tokenRow.id]
+        );
+
+        // Generate new tokens
+        tokens = await this.generateAuthTokens(user, { correlationId });
+      } else {
+        // Generate new access token only
+        const accessToken = generateToken(
+          {
+            userId: user.id,
+            email: user.email,
+            role: user.role,
+            tokenType: 'access' as const,
+          },
+          this.config.jwt.expiresIn
+        );
+
+        tokens = {
+          accessToken,
+          refreshToken,
+          expiresIn: this.config.jwt.expiresIn,
+          tokenType: 'Bearer',
+        };
+      }
 
       const executionTimeMs = Date.now() - startTime;
 
-      console.log('[AUTH_SERVICE] Token refresh successful:', {
+      console.log('[AUTH_SERVICE] Token refreshed successfully:', {
         userId: user.id,
-        email: user.email,
+        rotated: options?.rotateRefreshToken ?? false,
         executionTimeMs,
         correlationId,
         timestamp: new Date().toISOString(),
@@ -595,7 +726,7 @@ export class AuthService {
     } catch (error) {
       const executionTimeMs = Date.now() - startTime;
 
-      if (error instanceof AuthServiceError) {
+      if (error instanceof AuthenticationError) {
         console.error('[AUTH_SERVICE] Token refresh failed:', {
           error: error.message,
           code: error.code,
@@ -609,287 +740,276 @@ export class AuthService {
 
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      console.error('[AUTH_SERVICE] Unexpected token refresh error:', {
+      console.error('[AUTH_SERVICE] Unexpected error during token refresh:', {
         error: errorMessage,
         executionTimeMs,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      throw new AuthServiceError(
-        `Token refresh failed: ${errorMessage}`,
-        AuthErrorCode.INVALID_TOKEN,
-        { correlationId }
+      throw new AuthenticationError(
+        'Token refresh failed due to an unexpected error',
+        'REFRESH_FAILED',
+        500,
+        { originalError: errorMessage, correlationId }
       );
     }
   }
 
   /**
-   * Logout user by blacklisting tokens
+   * Revoke refresh token
    * 
-   * Adds refresh token to blacklist to prevent further use. Access tokens
-   * cannot be revoked but will expire naturally.
+   * Marks a refresh token as revoked, preventing its future use.
+   * Used for logout and security purposes.
    * 
-   * @param refreshToken - Refresh token to blacklist
-   * @param options - Optional operation options
-   * @throws AuthServiceError if logout fails
+   * @param refreshToken - Refresh token to revoke
+   * @param options - Optional revocation options
+   * @throws {AuthenticationError} If revocation fails
+   * 
+   * @example
+   * ```typescript
+   * await authService.revokeToken(refreshToken);
+   * ```
    */
-  async logout(
+  async revokeToken(
     refreshToken: string,
     options?: {
       readonly correlationId?: string;
     }
   ): Promise<void> {
     const correlationId = options?.correlationId ?? generateCorrelationId();
-    const startTime = Date.now();
 
     try {
-      console.log('[AUTH_SERVICE] Starting logout:', {
+      console.log('[AUTH_SERVICE] Revoking refresh token:', {
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      // Verify refresh token
+      // Verify and decode token
       const payload = verifyRefreshToken(refreshToken, { correlationId });
 
-      // Add token to blacklist
-      await executeQuery(
-        `INSERT INTO token_blacklist (token_id, user_id, expires_at)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (token_id) DO NOTHING`,
-        [payload.tokenId, payload.userId, new Date(payload.exp * 1000)],
-        { correlationId, operation: 'blacklist_token' }
+      // Revoke token in database
+      const result = await this.db.query(
+        'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND token_id = $2 AND revoked_at IS NULL',
+        [payload.userId, payload.tokenId]
       );
 
-      const executionTimeMs = Date.now() - startTime;
+      if (result.rowCount === 0) {
+        console.warn('[AUTH_SERVICE] Token not found or already revoked:', {
+          userId: payload.userId,
+          tokenId: payload.tokenId,
+          correlationId,
+          timestamp: new Date().toISOString(),
+        });
+      }
 
-      console.log('[AUTH_SERVICE] Logout successful:', {
+      console.log('[AUTH_SERVICE] Token revoked successfully:', {
         userId: payload.userId,
         tokenId: payload.tokenId,
-        executionTimeMs,
         correlationId,
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
-      const executionTimeMs = Date.now() - startTime;
-
-      if (error instanceof AuthServiceError) {
-        console.error('[AUTH_SERVICE] Logout failed:', {
-          error: error.message,
-          code: error.code,
-          details: error.details,
-          executionTimeMs,
-          correlationId,
-          timestamp: new Date().toISOString(),
-        });
-        throw error;
-      }
-
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      console.error('[AUTH_SERVICE] Unexpected logout error:', {
+      console.error('[AUTH_SERVICE] Error revoking token:', {
         error: errorMessage,
-        executionTimeMs,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      throw new AuthServiceError(
-        `Logout failed: ${errorMessage}`,
-        AuthErrorCode.INVALID_TOKEN,
-        { correlationId }
+      throw new AuthenticationError(
+        'Failed to revoke token',
+        'REVOCATION_FAILED',
+        500,
+        { originalError: errorMessage, correlationId }
       );
     }
   }
 
   /**
-   * Initiate password reset flow
+   * Revoke all refresh tokens for a user
    * 
-   * Generates a password reset token and returns it. In production, this
-   * token would be sent via email to the user.
+   * Revokes all active refresh tokens for a user.
+   * Used for security purposes (e.g., password change, account compromise).
    * 
-   * @param request - Password reset request with email
-   * @param options - Optional operation options
-   * @returns Password reset token
-   * @throws AuthServiceError if reset initiation fails
+   * @param userId - User ID
+   * @param options - Optional revocation options
+   * 
+   * @example
+   * ```typescript
+   * await authService.revokeAllTokens(userId);
+   * ```
    */
-  async resetPassword(
+  async revokeAllTokens(
+    userId: string,
+    options?: {
+      readonly correlationId?: string;
+    }
+  ): Promise<void> {
+    const correlationId = options?.correlationId ?? generateCorrelationId();
+
+    try {
+      console.log('[AUTH_SERVICE] Revoking all tokens for user:', {
+        userId,
+        correlationId,
+        timestamp: new Date().toISOString(),
+      });
+
+      const result = await this.db.query(
+        'UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL',
+        [userId]
+      );
+
+      console.log('[AUTH_SERVICE] All tokens revoked successfully:', {
+        userId,
+        revokedCount: result.rowCount,
+        correlationId,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      console.error('[AUTH_SERVICE] Error revoking all tokens:', {
+        error: errorMessage,
+        userId,
+        correlationId,
+        timestamp: new Date().toISOString(),
+      });
+
+      throw new AuthenticationError(
+        'Failed to revoke all tokens',
+        'REVOCATION_FAILED',
+        500,
+        { originalError: errorMessage, correlationId }
+      );
+    }
+  }
+
+  /**
+   * Request password reset
+   * 
+   * Initiates password reset flow by generating a reset token and
+   * sending it to the user's email.
+   * 
+   * @param request - Password reset request
+   * @param options - Optional request options
+   * @returns Password reset token (for testing/development)
+   * @throws {AuthenticationError} If request fails
+   * 
+   * @example
+   * ```typescript
+   * await authService.requestPasswordReset({
+   *   email: 'user@example.com'
+   * });
+   * ```
+   */
+  async requestPasswordReset(
     request: PasswordResetRequest,
     options?: {
       readonly correlationId?: string;
     }
-  ): Promise<{ readonly token: string; readonly expiresAt: Date }> {
+  ): Promise<{ resetToken: string }> {
     const correlationId = options?.correlationId ?? generateCorrelationId();
     const startTime = Date.now();
 
     try {
-      console.log('[AUTH_SERVICE] Starting password reset:', {
+      console.log('[AUTH_SERVICE] Password reset requested:', {
         email: request.email,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      // Find user by email
-      const user = await queryOne<UserRecord>(
-        'SELECT * FROM users WHERE email = $1',
-        [request.email.toLowerCase()],
-        { correlationId, operation: 'find_user_by_email' }
+      // Get user
+      const result = await this.db.query(
+        'SELECT id, email, is_active FROM users WHERE email = $1',
+        [request.email.toLowerCase()]
       );
 
       // Always return success to prevent email enumeration
-      if (!user) {
-        console.warn('[AUTH_SERVICE] Password reset: User not found (returning success)', {
+      if (result.rows.length === 0) {
+        console.warn('[AUTH_SERVICE] Password reset requested for non-existent user:', {
           email: request.email,
           correlationId,
           timestamp: new Date().toISOString(),
         });
 
         // Return fake token to prevent timing attacks
-        const fakeToken = randomBytes(32).toString('hex');
-        const fakeExpiresAt = new Date(Date.now() + 3600000); // 1 hour
-
-        return {
-          token: fakeToken,
-          expiresAt: fakeExpiresAt,
-        };
+        return { resetToken: await generateSecureToken(32) };
       }
 
-      // Generate password reset token
-      const tokenId = randomBytes(16).toString('hex');
-      const resetToken = generatePasswordResetToken(
-        {
+      const user = result.rows[0];
+
+      if (!user.is_active) {
+        console.warn('[AUTH_SERVICE] Password reset requested for inactive user:', {
           userId: user.id,
-          email: user.email,
-          tokenId,
-        },
-        { correlationId }
+          email: request.email,
+          correlationId,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Return fake token to prevent account enumeration
+        return { resetToken: await generateSecureToken(32) };
+      }
+
+      // Check rate limiting
+      const recentRequests = await this.db.query(
+        `SELECT COUNT(*) as count FROM password_reset_tokens
+         WHERE user_id = $1 AND created_at > NOW() - INTERVAL '1 hour'`,
+        [user.id]
       );
 
-      // Use 1 hour expiration (3600 seconds)
-      const expiresAt = new Date(Date.now() + 3600000);
+      const resetConfig = getPasswordResetConfig();
 
-      // Store token in database
-      await executeQuery(
-        `INSERT INTO password_reset_tokens (token_id, user_id, expires_at, used)
-         VALUES ($1, $2, $3, $4)`,
-        [tokenId, user.id, expiresAt, false],
-        { correlationId, operation: 'store_reset_token' }
+      if (parseInt(recentRequests.rows[0].count) >= resetConfig.maxAttempts) {
+        throw new AuthenticationError(
+          'Too many password reset requests. Please try again later.',
+          'RATE_LIMIT_EXCEEDED',
+          429,
+          { correlationId }
+        );
+      }
+
+      // Generate reset token
+      const resetToken = await generateSecureToken(resetConfig.tokenLength);
+      const tokenHash = await hashPassword(resetToken);
+
+      // Store reset token
+      const expiresAt = new Date();
+      expiresAt.setTime(expiresAt.getTime() + resetConfig.tokenExpiration);
+
+      await this.db.query(
+        `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, created_at)
+         VALUES ($1, $2, $3, NOW())`,
+        [user.id, tokenHash, expiresAt]
+      );
+
+      // Log password reset request
+      await this.logAuthEvent(
+        user.id,
+        'PASSWORD_RESET_REQUEST',
+        true,
+        { correlationId }
       );
 
       const executionTimeMs = Date.now() - startTime;
 
       console.log('[AUTH_SERVICE] Password reset token generated:', {
         userId: user.id,
-        email: user.email,
-        tokenId,
         expiresAt: expiresAt.toISOString(),
         executionTimeMs,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      return {
-        token: resetToken,
-        expiresAt,
-      };
-    } catch (error) {
-      const executionTimeMs = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      console.error('[AUTH_SERVICE] Password reset failed:', {
-        error: errorMessage,
-        executionTimeMs,
-        correlationId,
-        timestamp: new Date().toISOString(),
-      });
-
-      throw new AuthServiceError(
-        `Password reset failed: ${errorMessage}`,
-        AuthErrorCode.VALIDATION_ERROR,
-        { correlationId }
-      );
-    }
-  }
-
-  /**
-   * Validate password reset token
-   * 
-   * Verifies that a password reset token is valid and not expired or used.
-   * 
-   * @param token - Password reset token to validate
-   * @param options - Optional operation options
-   * @returns Token payload if valid
-   * @throws AuthServiceError if token is invalid
-   */
-  async validateResetToken(
-    token: string,
-    options?: {
-      readonly correlationId?: string;
-    }
-  ): Promise<PasswordResetTokenPayload> {
-    const correlationId = options?.correlationId ?? generateCorrelationId();
-    const startTime = Date.now();
-
-    try {
-      console.log('[AUTH_SERVICE] Validating password reset token:', {
-        correlationId,
-        timestamp: new Date().toISOString(),
-      });
-
-      // Verify token signature and expiration
-      const payload = verifyPasswordResetToken(token, { correlationId });
-
-      // Check if token exists and is not used
-      const tokenRecord = await queryOne<PasswordResetTokenRecord>(
-        'SELECT * FROM password_reset_tokens WHERE token_id = $1',
-        [payload.tokenId],
-        { correlationId, operation: 'find_reset_token' }
-      );
-
-      if (!tokenRecord) {
-        console.warn('[AUTH_SERVICE] Reset token validation failed: Token not found', {
-          tokenId: payload.tokenId,
-          correlationId,
-          timestamp: new Date().toISOString(),
-        });
-
-        throw new AuthServiceError(
-          'Invalid password reset token',
-          AuthErrorCode.PASSWORD_RESET_TOKEN_INVALID,
-          { tokenId: payload.tokenId, correlationId }
-        );
-      }
-
-      if (tokenRecord.used) {
-        console.warn('[AUTH_SERVICE] Reset token validation failed: Token already used', {
-          tokenId: payload.tokenId,
-          correlationId,
-          timestamp: new Date().toISOString(),
-        });
-
-        throw new AuthServiceError(
-          'Password reset token has already been used',
-          AuthErrorCode.PASSWORD_RESET_TOKEN_USED,
-          { tokenId: payload.tokenId, correlationId }
-        );
-      }
-
-      const executionTimeMs = Date.now() - startTime;
-
-      console.log('[AUTH_SERVICE] Reset token validated successfully:', {
-        tokenId: payload.tokenId,
-        userId: payload.userId,
-        executionTimeMs,
-        correlationId,
-        timestamp: new Date().toISOString(),
-      });
-
-      return payload;
+      // In production, send email with reset link
+      // For now, return token for testing
+      return { resetToken };
     } catch (error) {
       const executionTimeMs = Date.now() - startTime;
 
-      if (error instanceof AuthServiceError) {
-        console.error('[AUTH_SERVICE] Reset token validation failed:', {
+      if (error instanceof AuthenticationError) {
+        console.error('[AUTH_SERVICE] Password reset request failed:', {
           error: error.message,
           code: error.code,
           details: error.details,
@@ -902,29 +1022,38 @@ export class AuthService {
 
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      console.error('[AUTH_SERVICE] Unexpected reset token validation error:', {
+      console.error('[AUTH_SERVICE] Unexpected error during password reset request:', {
         error: errorMessage,
         executionTimeMs,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      throw new AuthServiceError(
-        `Reset token validation failed: ${errorMessage}`,
-        AuthErrorCode.PASSWORD_RESET_TOKEN_INVALID,
-        { correlationId }
+      throw new AuthenticationError(
+        'Password reset request failed',
+        'PASSWORD_RESET_FAILED',
+        500,
+        { originalError: errorMessage, correlationId }
       );
     }
   }
 
   /**
-   * Complete password reset with new password
+   * Confirm password reset
    * 
-   * Validates reset token, updates user password, and marks token as used.
+   * Validates reset token and updates user's password.
    * 
-   * @param confirmation - Password reset confirmation data
-   * @param options - Optional operation options
-   * @throws AuthServiceError if password reset fails
+   * @param confirmation - Password reset confirmation
+   * @param options - Optional confirmation options
+   * @throws {AuthenticationError} If confirmation fails
+   * 
+   * @example
+   * ```typescript
+   * await authService.confirmPasswordReset({
+   *   token: 'reset-token',
+   *   newPassword: 'NewSecurePass123!'
+   * });
+   * ```
    */
   async confirmPasswordReset(
     confirmation: PasswordResetConfirmation,
@@ -936,56 +1065,120 @@ export class AuthService {
     const startTime = Date.now();
 
     try {
-      console.log('[AUTH_SERVICE] Starting password reset confirmation:', {
+      console.log('[AUTH_SERVICE] Confirming password reset:', {
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      // Validate reset token
-      const payload = await this.validateResetToken(confirmation.token, {
-        correlationId,
-      });
-
-      // Validate new password strength
+      // Validate new password
       const passwordValidation = validatePassword(confirmation.newPassword);
       if (!passwordValidation.isValid) {
-        throw new AuthServiceError(
-          'New password does not meet strength requirements',
-          AuthErrorCode.WEAK_PASSWORD,
-          {
-            errors: passwordValidation.errors,
-            strengthScore: passwordValidation.strengthScore,
-            correlationId,
-          }
+        throw new AuthenticationError(
+          `Password validation failed: ${passwordValidation.errors.join(', ')}`,
+          'INVALID_PASSWORD',
+          400,
+          { errors: passwordValidation.errors, correlationId }
         );
       }
 
-      // Hash new password - returns string directly
-      const passwordHash = await hashPassword(confirmation.newPassword);
+      // Check password strength
+      if (passwordValidation.strengthScore < 3) {
+        throw new AuthenticationError(
+          'Password is too weak. Please use a stronger password.',
+          'WEAK_PASSWORD',
+          400,
+          { strengthScore: passwordValidation.strengthScore, correlationId }
+        );
+      }
 
-      // Update password and mark token as used in transaction
-      await executeTransaction(
-        async (client) => {
-          // Update user password
-          await client.query(
-            'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
-            [passwordHash, payload.userId]
-          );
+      // Get all reset tokens for verification
+      const tokensResult = await this.db.query(
+        `SELECT prt.id, prt.user_id, prt.token_hash, prt.expires_at, prt.used_at,
+                u.email, u.is_active
+         FROM password_reset_tokens prt
+         JOIN users u ON prt.user_id = u.id
+         WHERE prt.expires_at > NOW() AND prt.used_at IS NULL
+         ORDER BY prt.created_at DESC`
+      );
 
-          // Mark token as used
-          await client.query(
-            'UPDATE password_reset_tokens SET used = true WHERE token_id = $1',
-            [payload.tokenId]
-          );
-        },
-        { correlationId, operation: 'confirm_password_reset' }
+      if (tokensResult.rows.length === 0) {
+        throw new AuthenticationError(
+          'Invalid or expired reset token',
+          'INVALID_TOKEN',
+          400,
+          { correlationId }
+        );
+      }
+
+      // Find matching token
+      let matchedToken = null;
+      for (const tokenRow of tokensResult.rows) {
+        const isMatch = await comparePassword(
+          confirmation.token,
+          tokenRow.token_hash
+        );
+        if (isMatch) {
+          matchedToken = tokenRow;
+          break;
+        }
+      }
+
+      if (!matchedToken) {
+        throw new AuthenticationError(
+          'Invalid or expired reset token',
+          'INVALID_TOKEN',
+          400,
+          { correlationId }
+        );
+      }
+
+      if (!matchedToken.is_active) {
+        throw new AuthenticationError(
+          'User account is inactive',
+          'ACCOUNT_INACTIVE',
+          403,
+          { correlationId }
+        );
+      }
+
+      // Hash new password
+      const newPasswordHash = await hashPassword(confirmation.newPassword);
+
+      // Update password and mark token as used
+      await this.db.query('BEGIN');
+
+      try {
+        await this.db.query(
+          'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+          [newPasswordHash, matchedToken.user_id]
+        );
+
+        await this.db.query(
+          'UPDATE password_reset_tokens SET used_at = NOW() WHERE id = $1',
+          [matchedToken.id]
+        );
+
+        // Revoke all refresh tokens for security
+        await this.revokeAllTokens(matchedToken.user_id, { correlationId });
+
+        await this.db.query('COMMIT');
+      } catch (error) {
+        await this.db.query('ROLLBACK');
+        throw error;
+      }
+
+      // Log password reset
+      await this.logAuthEvent(
+        matchedToken.user_id,
+        'PASSWORD_RESET',
+        true,
+        { correlationId }
       );
 
       const executionTimeMs = Date.now() - startTime;
 
-      console.log('[AUTH_SERVICE] Password reset completed successfully:', {
-        userId: payload.userId,
-        tokenId: payload.tokenId,
+      console.log('[AUTH_SERVICE] Password reset confirmed successfully:', {
+        userId: matchedToken.user_id,
         executionTimeMs,
         correlationId,
         timestamp: new Date().toISOString(),
@@ -993,7 +1186,7 @@ export class AuthService {
     } catch (error) {
       const executionTimeMs = Date.now() - startTime;
 
-      if (error instanceof AuthServiceError) {
+      if (error instanceof AuthenticationError) {
         console.error('[AUTH_SERVICE] Password reset confirmation failed:', {
           error: error.message,
           code: error.code,
@@ -1007,107 +1200,193 @@ export class AuthService {
 
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      console.error('[AUTH_SERVICE] Unexpected password reset confirmation error:', {
+      console.error('[AUTH_SERVICE] Unexpected error during password reset confirmation:', {
         error: errorMessage,
         executionTimeMs,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      throw new AuthServiceError(
-        `Password reset confirmation failed: ${errorMessage}`,
-        AuthErrorCode.VALIDATION_ERROR,
-        { correlationId }
+      throw new AuthenticationError(
+        'Password reset confirmation failed',
+        'PASSWORD_RESET_FAILED',
+        500,
+        { originalError: errorMessage, correlationId }
       );
     }
   }
 
   /**
-   * Generate access and refresh token pair
+   * Change user password
    * 
-   * @param user - User record
-   * @param options - Optional operation options
-   * @returns Token pair
+   * Changes user's password after verifying current password.
+   * Revokes all refresh tokens for security.
+   * 
+   * @param userId - User ID
+   * @param request - Password change request
+   * @param options - Optional change options
+   * @throws {AuthenticationError} If change fails
+   * 
+   * @example
+   * ```typescript
+   * await authService.changePassword(userId, {
+   *   currentPassword: 'OldPass123!',
+   *   newPassword: 'NewSecurePass123!'
+   * });
+   * ```
    */
-  private async generateTokenPair(
-    user: UserRecord,
+  async changePassword(
+    userId: string,
+    request: ChangePasswordRequest,
     options?: {
       readonly correlationId?: string;
     }
-  ): Promise<TokenPair> {
+  ): Promise<void> {
     const correlationId = options?.correlationId ?? generateCorrelationId();
+    const startTime = Date.now();
 
     try {
-      const tokenId = randomBytes(16).toString('hex');
-      const config = getJWTConfig();
-
-      const accessToken = generateAccessToken(
-        {
-          userId: user.id,
-          email: user.email,
-          role: user.role,
-        },
-        { correlationId }
-      );
-
-      const refreshToken = generateRefreshToken(
-        {
-          userId: user.id,
-          email: user.email,
-          tokenId,
-        },
-        { correlationId }
-      );
-
-      // Parse expiresIn string to seconds (e.g., '24h' -> 86400)
-      const expiresIn = this.parseExpiresIn(config.expiresIn);
-
-      return {
-        accessToken,
-        refreshToken,
-        expiresIn,
-        tokenType: 'Bearer',
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      console.error('[AUTH_SERVICE] Token generation failed:', {
-        error: errorMessage,
-        userId: user.id,
+      console.log('[AUTH_SERVICE] Changing password:', {
+        userId,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      throw new Error(`Token generation failed: ${errorMessage}`);
-    }
-  }
+      // Get user
+      const result = await this.db.query(
+        'SELECT id, password_hash, is_active FROM users WHERE id = $1',
+        [userId]
+      );
 
-  /**
-   * Parse expiresIn string to seconds
-   * 
-   * @param expiresIn - Expiration string (e.g., '24h', '7d', '15m')
-   * @returns Expiration time in seconds
-   */
-  private parseExpiresIn(expiresIn: string): number {
-    const match = expiresIn.match(/^(\d+)([smhd])$/);
-    if (!match) {
-      return 86400; // Default to 24 hours
-    }
+      if (result.rows.length === 0) {
+        throw new AuthenticationError(
+          'User not found',
+          'USER_NOT_FOUND',
+          404,
+          { correlationId }
+        );
+      }
 
-    const value = parseInt(match[1]!, 10);
-    const unit = match[2];
+      const user = result.rows[0];
 
-    switch (unit) {
-      case 's':
-        return value;
-      case 'm':
-        return value * 60;
-      case 'h':
-        return value * 3600;
-      case 'd':
-        return value * 86400;
-      default:
-        return 86400;
+      if (!user.is_active) {
+        throw new AuthenticationError(
+          'User account is inactive',
+          'ACCOUNT_INACTIVE',
+          403,
+          { correlationId }
+        );
+      }
+
+      // Verify current password
+      const passwordMatch = await comparePassword(
+        request.currentPassword,
+        user.password_hash
+      );
+
+      if (!passwordMatch) {
+        throw new AuthenticationError(
+          'Current password is incorrect',
+          'INVALID_PASSWORD',
+          401,
+          { correlationId }
+        );
+      }
+
+      // Validate new password
+      const passwordValidation = validatePassword(request.newPassword);
+      if (!passwordValidation.isValid) {
+        throw new AuthenticationError(
+          `Password validation failed: ${passwordValidation.errors.join(', ')}`,
+          'INVALID_PASSWORD',
+          400,
+          { errors: passwordValidation.errors, correlationId }
+        );
+      }
+
+      // Check password strength
+      if (passwordValidation.strengthScore < 3) {
+        throw new AuthenticationError(
+          'Password is too weak. Please use a stronger password.',
+          'WEAK_PASSWORD',
+          400,
+          { strengthScore: passwordValidation.strengthScore, correlationId }
+        );
+      }
+
+      // Check if new password is same as current
+      const samePassword = await comparePassword(
+        request.newPassword,
+        user.password_hash
+      );
+
+      if (samePassword) {
+        throw new AuthenticationError(
+          'New password must be different from current password',
+          'SAME_PASSWORD',
+          400,
+          { correlationId }
+        );
+      }
+
+      // Hash new password
+      const newPasswordHash = await hashPassword(request.newPassword);
+
+      // Update password
+      await this.db.query(
+        'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
+        [newPasswordHash, userId]
+      );
+
+      // Revoke all refresh tokens for security
+      await this.revokeAllTokens(userId, { correlationId });
+
+      // Log password change
+      await this.logAuthEvent(
+        userId,
+        'PASSWORD_CHANGE',
+        true,
+        { correlationId }
+      );
+
+      const executionTimeMs = Date.now() - startTime;
+
+      console.log('[AUTH_SERVICE] Password changed successfully:', {
+        userId,
+        executionTimeMs,
+        correlationId,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      const executionTimeMs = Date.now() - startTime;
+
+      if (error instanceof AuthenticationError) {
+        console.error('[AUTH_SERVICE] Password change failed:', {
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          executionTimeMs,
+          correlationId,
+          timestamp: new Date().toISOString(),
+        });
+        throw error;
+      }
+
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      console.error('[AUTH_SERVICE] Unexpected error during password change:', {
+        error: errorMessage,
+        executionTimeMs,
+        correlationId,
+        timestamp: new Date().toISOString(),
+      });
+
+      throw new AuthenticationError(
+        'Password change failed',
+        'PASSWORD_CHANGE_FAILED',
+        500,
+        { originalError: errorMessage, correlationId }
+      );
     }
   }
 
@@ -1116,11 +1395,144 @@ export class AuthService {
    * 
    * Increments failed login counter and locks account if threshold exceeded.
    * 
-   * @param user - User record
-   * @param options - Optional operation options
+   * @param userId - User ID
+   * @param options - Optional handling options
    */
   private async handleFailedLogin(
-    user: UserRecord,
+    userId: string,
+    options?: {
+      readonly ipAddress?: string;
+      readonly correlationId?: string;
+    }
+  ): Promise<void> {
+    const correlationId = options?.correlationId ?? generateCorrelationId();
+
+    try {
+      const lockoutConfig = getAccountLockoutConfig();
+
+      // Increment failed attempts
+      const result = await this.db.query(
+        `UPDATE users
+         SET failed_login_attempts = failed_login_attempts + 1,
+             last_failed_login_at = NOW()
+         WHERE id = $1
+         RETURNING failed_login_attempts`,
+        [userId]
+      );
+
+      const failedAttempts = result.rows[0].failed_login_attempts;
+
+      // Check if account should be locked
+      if (failedAttempts >= lockoutConfig.maxAttempts) {
+        const lockedUntil = new Date();
+        lockedUntil.setTime(lockedUntil.getTime() + lockoutConfig.lockoutDuration);
+
+        await this.db.query(
+          'UPDATE users SET locked_until = $1 WHERE id = $2',
+          [lockedUntil, userId]
+        );
+
+        console.warn('[AUTH_SERVICE] Account locked due to failed login attempts:', {
+          userId,
+          failedAttempts,
+          lockedUntil: lockedUntil.toISOString(),
+          correlationId,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Log failed login
+      await this.logAuthEvent(
+        userId,
+        'LOGIN',
+        false,
+        {
+          reason: 'INVALID_PASSWORD',
+          failedAttempts,
+          ipAddress: options?.ipAddress,
+          correlationId,
+        }
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      console.error('[AUTH_SERVICE] Error handling failed login:', {
+        error: errorMessage,
+        userId,
+        correlationId,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * Get account lockout information
+   * 
+   * Retrieves current lockout status and information for a user account.
+   * 
+   * @param userId - User ID
+   * @returns Account lockout information
+   */
+  async getAccountLockoutInfo(userId: string): Promise<AccountLockoutInfo> {
+    try {
+      const result = await this.db.query(
+        `SELECT failed_login_attempts, locked_until, last_failed_login_at
+         FROM users WHERE id = $1`,
+        [userId]
+      );
+
+      if (result.rows.length === 0) {
+        throw new AuthenticationError(
+          'User not found',
+          'USER_NOT_FOUND',
+          404
+        );
+      }
+
+      const row = result.rows[0];
+      const isLocked = row.locked_until && new Date(row.locked_until) > new Date();
+
+      return {
+        isLocked,
+        failedAttempts: row.failed_login_attempts,
+        lockedUntil: row.locked_until ? new Date(row.locked_until) : undefined,
+        lastFailedLoginAt: row.last_failed_login_at
+          ? new Date(row.last_failed_login_at)
+          : undefined,
+      };
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        throw error;
+      }
+
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      console.error('[AUTH_SERVICE] Error getting lockout info:', {
+        error: errorMessage,
+        userId,
+        timestamp: new Date().toISOString(),
+      });
+
+      throw new AuthenticationError(
+        'Failed to get account lockout information',
+        'LOCKOUT_INFO_FAILED',
+        500,
+        { originalError: errorMessage }
+      );
+    }
+  }
+
+  /**
+   * Unlock user account
+   * 
+   * Manually unlocks a user account and resets failed login attempts.
+   * Used by administrators or automated processes.
+   * 
+   * @param userId - User ID
+   * @param options - Optional unlock options
+   */
+  async unlockAccount(
+    userId: string,
     options?: {
       readonly correlationId?: string;
     }
@@ -1128,98 +1540,223 @@ export class AuthService {
     const correlationId = options?.correlationId ?? generateCorrelationId();
 
     try {
-      const newFailedAttempts = user.failed_login_attempts + 1;
-      let lockedUntil: Date | null = null;
-
-      if (newFailedAttempts >= LOCKOUT_CONFIG.MAX_FAILED_ATTEMPTS) {
-        lockedUntil = new Date(Date.now() + LOCKOUT_CONFIG.LOCKOUT_DURATION_MS);
-
-        console.warn('[AUTH_SERVICE] Account locked due to failed login attempts:', {
-          userId: user.id,
-          email: user.email,
-          failedAttempts: newFailedAttempts,
-          lockedUntil: lockedUntil.toISOString(),
-          correlationId,
-          timestamp: new Date().toISOString(),
-        });
-      }
-
-      await executeQuery(
-        'UPDATE users SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3',
-        [newFailedAttempts, lockedUntil, user.id],
-        { correlationId, operation: 'update_failed_attempts' }
-      );
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      console.error('[AUTH_SERVICE] Failed to update failed login attempts:', {
-        error: errorMessage,
-        userId: user.id,
+      console.log('[AUTH_SERVICE] Unlocking account:', {
+        userId,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      // Don't throw - this is a non-critical operation
+      await this.db.query(
+        'UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1',
+        [userId]
+      );
+
+      // Log account unlock
+      await this.logAuthEvent(
+        userId,
+        'ACCOUNT_UNLOCK',
+        true,
+        { correlationId }
+      );
+
+      console.log('[AUTH_SERVICE] Account unlocked successfully:', {
+        userId,
+        correlationId,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      console.error('[AUTH_SERVICE] Error unlocking account:', {
+        error: errorMessage,
+        userId,
+        correlationId,
+        timestamp: new Date().toISOString(),
+      });
+
+      throw new AuthenticationError(
+        'Failed to unlock account',
+        'UNLOCK_FAILED',
+        500,
+        { originalError: errorMessage, correlationId }
+      );
     }
   }
 
   /**
-   * Check if token is blacklisted
+   * Log authentication event
    * 
-   * @param tokenId - Token ID to check
-   * @param options - Optional operation options
-   * @returns True if token is blacklisted
+   * Records authentication events for audit trail and security monitoring.
+   * 
+   * @param userId - User ID (null for failed attempts on non-existent users)
+   * @param eventType - Type of authentication event
+   * @param success - Whether the event was successful
+   * @param metadata - Additional event metadata
    */
-  private async isTokenBlacklisted(
-    tokenId: string,
+  private async logAuthEvent(
+    userId: string | null,
+    eventType: string,
+    success: boolean,
+    metadata?: Record<string, unknown>
+  ): Promise<void> {
+    try {
+      await this.db.query(
+        `INSERT INTO auth_events (user_id, event_type, success, metadata, created_at)
+         VALUES ($1, $2, $3, $4, NOW())`,
+        [userId, eventType, success, metadata ? JSON.stringify(metadata) : null]
+      );
+    } catch (error) {
+      // Don't throw error for logging failures
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      console.error('[AUTH_SERVICE] Error logging auth event:', {
+        error: errorMessage,
+        userId,
+        eventType,
+        success,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * Verify user's email address
+   * 
+   * Marks user's email as verified after email confirmation.
+   * 
+   * @param userId - User ID
+   * @param options - Optional verification options
+   */
+  async verifyEmail(
+    userId: string,
     options?: {
       readonly correlationId?: string;
     }
-  ): Promise<boolean> {
+  ): Promise<void> {
     const correlationId = options?.correlationId ?? generateCorrelationId();
 
     try {
-      const record = await queryOne<TokenBlacklistRecord>(
-        'SELECT token_id FROM token_blacklist WHERE token_id = $1 AND expires_at > NOW()',
-        [tokenId],
-        { correlationId, operation: 'check_token_blacklist' }
-      );
-
-      return record !== null;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      console.error('[AUTH_SERVICE] Failed to check token blacklist:', {
-        error: errorMessage,
-        tokenId,
+      console.log('[AUTH_SERVICE] Verifying email:', {
+        userId,
         correlationId,
         timestamp: new Date().toISOString(),
       });
 
-      // Fail closed - treat as blacklisted on error
-      return true;
+      await this.db.query(
+        'UPDATE users SET email_verified = true, updated_at = NOW() WHERE id = $1',
+        [userId]
+      );
+
+      // Log email verification
+      await this.logAuthEvent(
+        userId,
+        'EMAIL_VERIFIED',
+        true,
+        { correlationId }
+      );
+
+      console.log('[AUTH_SERVICE] Email verified successfully:', {
+        userId,
+        correlationId,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      console.error('[AUTH_SERVICE] Error verifying email:', {
+        error: errorMessage,
+        userId,
+        correlationId,
+        timestamp: new Date().toISOString(),
+      });
+
+      throw new AuthenticationError(
+        'Failed to verify email',
+        'EMAIL_VERIFICATION_FAILED',
+        500,
+        { originalError: errorMessage, correlationId }
+      );
     }
   }
 
   /**
-   * Map database user record to authenticated user
+   * Get user by ID
    * 
-   * @param user - User record from database
-   * @returns Authenticated user object
+   * Retrieves user information by user ID.
+   * 
+   * @param userId - User ID
+   * @returns User object
+   * @throws {AuthenticationError} If user not found
    */
-  private mapUserToAuthenticatedUser(user: UserRecord): AuthenticatedUser {
-    return {
-      id: user.id,
-      email: user.email,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      role: user.role,
-      isActive: user.is_active,
-    };
+  async getUserById(userId: string): Promise<User> {
+    try {
+      const result = await this.db.query(
+        `SELECT id, email, first_name, last_name, role, is_active,
+                email_verified, created_at, updated_at
+         FROM users WHERE id = $1`,
+        [userId]
+      );
+
+      if (result.rows.length === 0) {
+        throw new AuthenticationError(
+          'User not found',
+          'USER_NOT_FOUND',
+          404
+        );
+      }
+
+      const row = result.rows[0];
+
+      return {
+        id: row.id,
+        email: row.email,
+        firstName: row.first_name,
+        lastName: row.last_name,
+        role: row.role,
+        isActive: row.is_active,
+        emailVerified: row.email_verified,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        throw error;
+      }
+
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      console.error('[AUTH_SERVICE] Error getting user:', {
+        error: errorMessage,
+        userId,
+        timestamp: new Date().toISOString(),
+      });
+
+      throw new AuthenticationError(
+        'Failed to get user',
+        'GET_USER_FAILED',
+        500,
+        { originalError: errorMessage }
+      );
+    }
   }
 }
 
 /**
- * Default export: AuthService instance
+ * Create authentication service instance
+ * 
+ * Factory function to create a new AuthService instance.
+ * 
+ * @param db - Database connection pool
+ * @returns AuthService instance
+ * 
+ * @example
+ * ```typescript
+ * const authService = createAuthService(db);
+ * ```
  */
-export default new AuthService();
+export function createAuthService(db: Pool): AuthService {
+  return new AuthService(db);
+}
+
+// Export default instance
+export default AuthService;
