@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
-    "module": "Node16",
-    "moduleResolution": "node16",
+    "module": "ESNext",
+    "moduleResolution": "node",
     "resolveJsonModule": true,
     "allowJs": false,
     "checkJs": false,
@@ -20,7 +20,7 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "verbatimModuleSyntax": false,
+    "verbatimModuleSyntax": true,
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -46,28 +46,29 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
+      "@components/*": ["./src/components/*"],
+      "@features/*": ["./src/features/*"],
       "@services/*": ["./src/services/*"],
       "@utils/*": ["./src/utils/*"],
+      "@hooks/*": ["./src/hooks/*"],
       "@types/*": ["./src/types/*"],
       "@config/*": ["./src/config/*"],
-      "@controllers/*": ["./src/controllers/*"],
-      "@middleware/*": ["./src/middleware/*"],
-      "@routes/*": ["./src/routes/*"],
-      "@db/*": ["./src/db/*"]
-    },
-    "types": ["node", "vitest/globals"]
+      "@assets/*": ["./src/assets/*"]
+    }
   },
   "include": [
     "src/**/*",
     "src/**/*.ts",
-    "src/**/*.d.ts",
-    "tests/**/*.ts"
+    "src/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "build",
-    "coverage"
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "coverage",
+    "tests"
   ],
   "ts-node": {
     "compilerOptions": {
