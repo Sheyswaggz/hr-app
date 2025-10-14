@@ -10,6 +10,7 @@
  */
 
 import { randomBytes } from 'crypto';
+import jwt from 'jsonwebtoken';
 
 import { executeQuery, executeTransaction, queryOne } from '../db/index.js';
 import { type UserRole } from '../types/index.js';
@@ -22,11 +23,12 @@ import {
   type PasswordResetTokenPayload,
   type RegisterData,
   type TokenPair,
+  type RefreshTokenPayload,
 } from '../types/auth.js';
 import { hashPassword, comparePassword, validatePassword } from '../utils/password.js';
 import {
-  generateToken,
   verifyToken,
+  verifyRefreshToken,
 } from '../utils/jwt.js';
 import { getJWTConfig } from '../config/auth.js';
 
@@ -515,11 +517,11 @@ export class AuthService {
         timestamp: new Date().toISOString(),
       });
 
-      // Verify refresh token
-      const payload = verifyToken(refreshToken);
+      // Verify refresh token (returns RefreshTokenPayload synchronously)
+      const payload: RefreshTokenPayload = verifyRefreshToken(refreshToken);
 
       // Check if token is blacklisted
-      const isBlacklisted = await this.isTokenBlacklisted(payload.tokenId!, {
+      const isBlacklisted = await this.isTokenBlacklisted(payload.tokenId, {
         correlationId,
       });
 
@@ -646,8 +648,8 @@ export class AuthService {
         timestamp: new Date().toISOString(),
       });
 
-      // Verify refresh token
-      const payload = verifyToken(refreshToken);
+      // Verify refresh token (returns RefreshTokenPayload synchronously)
+      const payload: RefreshTokenPayload = verifyRefreshToken(refreshToken);
 
       // Add token to blacklist
       await executeQuery(
@@ -753,17 +755,23 @@ export class AuthService {
 
       // Generate password reset token
       const tokenId = randomBytes(16).toString('hex');
-      const resetToken = generateToken(
+      const config = getJWTConfig();
+      
+      const resetToken = jwt.sign(
         {
           userId: user.id,
           email: user.email,
-          role: user.role,
           tokenId,
-          purpose: 'password_reset' as any,
+          purpose: 'password_reset',
+        },
+        config.secret,
+        {
+          expiresIn: config.passwordResetTokenExpiry,
+          issuer: config.issuer,
+          audience: config.audience,
         }
       );
 
-      const config = getJWTConfig();
       const expiresAt = new Date(Date.now() + config.passwordResetTokenExpiry * 1000);
 
       // Store token in database
@@ -835,7 +843,20 @@ export class AuthService {
       });
 
       // Verify token signature and expiration
-      const payload = verifyToken(token) as any;
+      const config = getJWTConfig();
+      const decoded = jwt.verify(token, config.secret, {
+        issuer: config.issuer,
+        audience: config.audience,
+      }) as any;
+
+      const payload: PasswordResetTokenPayload = {
+        userId: decoded.userId,
+        email: decoded.email,
+        tokenId: decoded.tokenId,
+        iat: decoded.iat,
+        exp: decoded.exp,
+        purpose: 'password_reset',
+      };
 
       // Check if token exists and is not used
       const tokenRecord = await queryOne<PasswordResetTokenRecord>(
@@ -882,7 +903,7 @@ export class AuthService {
         timestamp: new Date().toISOString(),
       });
 
-      return payload as PasswordResetTokenPayload;
+      return payload;
     } catch (error) {
       const executionTimeMs = Date.now() - startTime;
 
@@ -1037,25 +1058,40 @@ export class AuthService {
 
     try {
       const tokenId = randomBytes(16).toString('hex');
+      const config = getJWTConfig();
 
-      const accessToken = generateToken(
+      // Generate access token
+      const accessToken = jwt.sign(
         {
           userId: user.id,
           email: user.email,
           role: user.role,
+          tokenType: 'access',
+        },
+        config.secret,
+        {
+          expiresIn: config.accessTokenExpiry,
+          issuer: config.issuer,
+          audience: config.audience,
         }
       );
 
-      const refreshToken = generateToken(
+      // Generate refresh token
+      const refreshToken = jwt.sign(
         {
           userId: user.id,
           email: user.email,
           role: user.role,
           tokenId,
+          tokenType: 'refresh',
+        },
+        config.secret,
+        {
+          expiresIn: config.refreshTokenExpiry,
+          issuer: config.issuer,
+          audience: config.audience,
         }
       );
-
-      const config = getJWTConfig();
 
       return {
         accessToken,
