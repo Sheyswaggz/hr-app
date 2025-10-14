@@ -12,6 +12,7 @@
  */
 
 import { type Server } from 'http';
+import { type Socket } from 'net';
 
 import app from './app.js';
 import { initializePool, shutdown as shutdownDatabase, testConnection } from './db/index.js';
@@ -226,10 +227,11 @@ function setupConnectionTracking(server: Server): void {
   server.on('connection', (socket) => {
     serverState.activeConnections++;
 
+    const netSocket = socket as Socket;
     console.log('[SERVER] New connection established:', {
       activeConnections: serverState.activeConnections,
-      remoteAddress: socket.remoteAddress,
-      remotePort: socket.remotePort,
+      remoteAddress: netSocket.remoteAddress,
+      remotePort: netSocket.remotePort,
     });
 
     socket.on('close', () => {
@@ -237,7 +239,7 @@ function setupConnectionTracking(server: Server): void {
 
       console.log('[SERVER] Connection closed:', {
         activeConnections: serverState.activeConnections,
-        remoteAddress: socket.remoteAddress,
+        remoteAddress: netSocket.remoteAddress,
       });
     });
   });
@@ -300,9 +302,10 @@ async function startServer(config: ServerConfig): Promise<Server> {
       });
 
       server.on('clientError', (error, socket) => {
+        const netSocket = socket as Socket;
         console.error('[SERVER] Client error:', {
           error: error.message,
-          remoteAddress: socket.remoteAddress,
+          remoteAddress: netSocket.remoteAddress,
           timestamp: new Date().toISOString(),
         });
 
