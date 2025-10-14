@@ -516,7 +516,7 @@ export class AuthService {
       });
 
       // Verify refresh token
-      const payload = verifyToken(refreshToken, 'refresh', { correlationId });
+      const payload = verifyToken(refreshToken);
 
       // Check if token is blacklisted
       const isBlacklisted = await this.isTokenBlacklisted(payload.tokenId!, {
@@ -647,7 +647,7 @@ export class AuthService {
       });
 
       // Verify refresh token
-      const payload = verifyToken(refreshToken, 'refresh', { correlationId });
+      const payload = verifyToken(refreshToken);
 
       // Add token to blacklist
       await executeQuery(
@@ -757,10 +757,10 @@ export class AuthService {
         {
           userId: user.id,
           email: user.email,
+          role: user.role,
           tokenId,
-        },
-        'reset',
-        { correlationId }
+          purpose: 'password_reset' as any,
+        }
       );
 
       const config = getJWTConfig();
@@ -835,7 +835,7 @@ export class AuthService {
       });
 
       // Verify token signature and expiration
-      const payload = verifyToken(token, 'reset', { correlationId });
+      const payload = verifyToken(token) as any;
 
       // Check if token exists and is not used
       const tokenRecord = await queryOne<PasswordResetTokenRecord>(
@@ -1043,19 +1043,16 @@ export class AuthService {
           userId: user.id,
           email: user.email,
           role: user.role,
-        },
-        'access',
-        { correlationId }
+        }
       );
 
       const refreshToken = generateToken(
         {
           userId: user.id,
           email: user.email,
+          role: user.role,
           tokenId,
-        },
-        'refresh',
-        { correlationId }
+        }
       );
 
       const config = getJWTConfig();
