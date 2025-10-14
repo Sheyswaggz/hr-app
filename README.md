@@ -1,2 +1,16 @@
-# hr-app
-This is a medium complexity project. Recommended: 2 milestones, 3 sprints, 12-15 tasks. A full-stack HR web application to manage three core HR functions: employee onboarding workflows, performance appraisal cycles, and leave request processing. Requires database integration, user authentication for different roles (HR admin, managers, employees...
+hr-app/
+├── src/                    # Source code
+│   ├── modules/           # Feature modules (modular architecture)
+│   ├── shared/            # Shared utilities, components, and types
+│   ├── config/            # Application configuration
+│   └── main.tsx           # Application entry point
+├── dist/                  # Production build output (generated)
+├── node_modules/          # Dependencies (generated)
+├── .husky/                # Git hooks (generated)
+├── package.json           # Project dependencies and scripts
+├── tsconfig.json          # TypeScript configuration
+├── eslint.config.js       # ESLint configuration (flat config)
+├── .prettierrc            # Prettier configuration
+├── .prettierignore        # Prettier ignore patterns
+├── .gitignore             # Git ignore patterns
+└── README.md              # This file
