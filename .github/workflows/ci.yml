@@ -1,0 +1,625 @@
+name: CI/CD Pipeline
+
+# Trigger configuration with path-based filtering
+on:
+  push:
+    branches: [main, develop]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - '.prettierignore'
+      - '.prettierrc'
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip test execution'
+        required: false
+        default: false
+        type: boolean
+
+# Global environment variables
+env:
+  NODE_VERSION: '18'
+  CACHE_VERSION: v1
+
+# Concurrency control - cancel in-progress runs for PRs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Detect changes to optimize what to run
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      source: ${{ steps.filter.outputs.source }}
+      tests: ${{ steps.filter.outputs.tests }}
+      docs: ${{ steps.filter.outputs.docs }}
+      config: ${{ steps.filter.outputs.config }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for file changes
+        uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            source:
+              - 'src/**'
+              - 'migrations/**'
+              - 'package.json'
+              - 'tsconfig.json'
+            tests:
+              - 'tests/**'
+              - 'src/**'
+            docs:
+              - 'docs/**'
+              - '**.md'
+            config:
+              - 'package.json'
+              - 'tsconfig.json'
+              - 'eslint.config.js'
+              - '.prettierrc'
+
+  # Install dependencies with caching
+  install:
+    name: Install Dependencies
+    needs: changes
+    if: needs.changes.outputs.source == 'true' || needs.changes.outputs.tests == 'true' || needs.changes.outputs.config == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache node modules
+        id: cache-node-modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-
+
+      - name: Install dependencies
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit
+
+      - name: Verify installation
+        run: |
+          echo "Node version: $(node --version)"
+          echo "NPM version: $(npm --version)"
+          echo "Dependencies installed successfully"
+
+  # Linting
+  lint:
+    name: Lint Code
+    needs: [changes, install]
+    if: needs.changes.outputs.source == 'true' || needs.changes.outputs.config == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore node modules cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('package.json') }}
+
+      - name: Run ESLint
+        run: npm run lint
+        continue-on-error: false
+
+      - name: Check formatting
+        run: npm run format:check
+        continue-on-error: false
+
+      - name: Lint results
+        if: always()
+        run: |
+          echo "Linting completed"
+          echo "Status: ${{ job.status }}"
+
+  # Type checking
+  typecheck:
+    name: Type Check
+    needs: [changes, install]
+    if: needs.changes.outputs.source == 'true' || needs.changes.outputs.config == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore node modules cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('package.json') }}
+
+      - name: Run TypeScript compiler
+        run: npm run type-check
+
+      - name: Type check results
+        if: always()
+        run: |
+          echo "Type checking completed"
+          echo "Status: ${{ job.status }}"
+
+  # Unit tests
+  test-unit:
+    name: Unit Tests
+    needs: [changes, install]
+    if: |
+      (needs.changes.outputs.source == 'true' || needs.changes.outputs.tests == 'true') &&
+      github.event.inputs.skip_tests != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore node modules cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('package.json') }}
+
+      - name: Run unit tests
+        run: npm run test -- --testPathPattern="tests/unit"
+        env:
+          NODE_ENV: test
+
+      - name: Unit test results
+        if: always()
+        run: |
+          echo "Unit tests completed"
+          echo "Status: ${{ job.status }}"
+
+  # Integration tests
+  test-integration:
+    name: Integration Tests
+    needs: [changes, install]
+    if: |
+      (needs.changes.outputs.source == 'true' || needs.changes.outputs.tests == 'true') &&
+      github.event.inputs.skip_tests != 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hr_app_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore node modules cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('package.json') }}
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+          echo "PostgreSQL is ready"
+
+      - name: Run database migrations
+        run: npm run migrate:up
+        env:
+          NODE_ENV: test
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_NAME: hr_app_test
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: postgres
+
+      - name: Run integration tests
+        run: npm run test -- --testPathPattern="tests/integration"
+        env:
+          NODE_ENV: test
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_NAME: hr_app_test
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: postgres
+
+      - name: Integration test results
+        if: always()
+        run: |
+          echo "Integration tests completed"
+          echo "Status: ${{ job.status }}"
+
+  # E2E tests
+  test-e2e:
+    name: E2E Tests
+    needs: [changes, install]
+    if: |
+      (needs.changes.outputs.source == 'true' || needs.changes.outputs.tests == 'true') &&
+      github.event.inputs.skip_tests != 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hr_app_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore node modules cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('package.json') }}
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+          echo "PostgreSQL is ready"
+
+      - name: Run database migrations
+        run: npm run migrate:up
+        env:
+          NODE_ENV: test
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_NAME: hr_app_test
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: postgres
+
+      - name: Run E2E tests
+        run: npm run test -- --testPathPattern="tests/e2e"
+        env:
+          NODE_ENV: test
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_NAME: hr_app_test
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: postgres
+
+      - name: E2E test results
+        if: always()
+        run: |
+          echo "E2E tests completed"
+          echo "Status: ${{ job.status }}"
+
+  # Test coverage
+  test-coverage:
+    name: Test Coverage
+    needs: [changes, install]
+    if: |
+      (needs.changes.outputs.source == 'true' || needs.changes.outputs.tests == 'true') &&
+      github.event.inputs.skip_tests != 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hr_app_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore node modules cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('package.json') }}
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+          echo "PostgreSQL is ready"
+
+      - name: Run database migrations
+        run: npm run migrate:up
+        env:
+          NODE_ENV: test
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_NAME: hr_app_test
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: postgres
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+        env:
+          NODE_ENV: test
+          DATABASE_HOST: localhost
+          DATABASE_PORT: 5432
+          DATABASE_NAME: hr_app_test
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: postgres
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          echo "Coverage report generated"
+          if [ -f coverage/coverage-summary.json ]; then
+            cat coverage/coverage-summary.json
+          fi
+
+  # Build application
+  build:
+    name: Build Application
+    needs: [changes, install, lint, typecheck]
+    if: needs.changes.outputs.source == 'true' || needs.changes.outputs.config == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore node modules cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('package.json') }}
+
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            dist/
+            package.json
+          retention-days: 7
+
+      - name: Build summary
+        run: |
+          echo "Build completed successfully"
+          echo "Build size:"
+          du -sh dist/ || echo "No dist directory"
+
+  # Security scanning
+  security:
+    name: Security Scan
+    needs: [changes, install]
+    if: needs.changes.outputs.source == 'true' || needs.changes.outputs.config == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore node modules cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('package.json') }}
+
+      - name: Run npm audit
+        run: |
+          npm audit --audit-level=high || true
+          npm audit --json > audit-report.json || true
+        continue-on-error: true
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-audit-report
+          path: audit-report.json
+          retention-days: 30
+
+      - name: Security scan summary
+        if: always()
+        run: |
+          echo "Security scan completed"
+          if [ -f audit-report.json ]; then
+            echo "Audit report generated"
+          fi
+
+  # Deploy to staging (only on main branch)
+  deploy-staging:
+    name: Deploy to Staging
+    needs: [build, test-unit, test-integration, test-e2e, security]
+    if: |
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.hr-app.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: ./dist
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          echo "Build artifacts downloaded"
+          echo "Deployment would happen here"
+          # In a real scenario, this would deploy to your staging environment
+          # Examples:
+          # - Deploy to Heroku: git push heroku main
+          # - Deploy to AWS: aws s3 sync dist/ s3://staging-bucket
+          # - Deploy to Kubernetes: kubectl apply -f k8s/staging/
+          # - Deploy to Vercel: vercel deploy --prod
+        env:
+          DEPLOY_ENV: staging
+
+      - name: Deployment summary
+        run: |
+          echo "Deployment to staging completed"
+          echo "Environment: staging"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+
+  # Pipeline summary
+  pipeline-summary:
+    name: Pipeline Summary
+    needs: [changes, lint, typecheck, test-unit, test-integration, test-e2e, test-coverage, build, security]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pipeline results
+        run: |
+          echo "=== CI/CD Pipeline Summary ==="
+          echo ""
+          echo "Changes detected:"
+          echo "  Source: ${{ needs.changes.outputs.source }}"
+          echo "  Tests: ${{ needs.changes.outputs.tests }}"
+          echo "  Docs: ${{ needs.changes.outputs.docs }}"
+          echo "  Config: ${{ needs.changes.outputs.config }}"
+          echo ""
+          echo "Job results:"
+          echo "  Lint: ${{ needs.lint.result }}"
+          echo "  Type Check: ${{ needs.typecheck.result }}"
+          echo "  Unit Tests: ${{ needs.test-unit.result }}"
+          echo "  Integration Tests: ${{ needs.test-integration.result }}"
+          echo "  E2E Tests: ${{ needs.test-e2e.result }}"
+          echo "  Coverage: ${{ needs.test-coverage.result }}"
+          echo "  Build: ${{ needs.build.result }}"
+          echo "  Security: ${{ needs.security.result }}"
+          echo ""
+          echo "Pipeline execution time: ${{ github.event.repository.updated_at }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "Event: ${{ github.event_name }}"
+
+      - name: Check for failures
+        if: |
+          needs.lint.result == 'failure' ||
+          needs.typecheck.result == 'failure' ||
+          needs.test-unit.result == 'failure' ||
+          needs.test-integration.result == 'failure' ||
+          needs.test-e2e.result == 'failure' ||
+          needs.build.result == 'failure' ||
+          needs.security.result == 'failure'
+        run: |
+          echo "Pipeline failed - one or more jobs failed"
+          exit 1
+
+      - name: Success message
+        if: |
+          needs.lint.result == 'success' &&
+          needs.typecheck.result == 'success' &&
+          (needs.test-unit.result == 'success' || needs.test-unit.result == 'skipped') &&
+          (needs.test-integration.result == 'success' || needs.test-integration.result == 'skipped') &&
+          (needs.test-e2e.result == 'success' || needs.test-e2e.result == 'skipped') &&
+          needs.build.result == 'success' &&
+          needs.security.result == 'success'
+        run: |
+          echo "✅ Pipeline completed successfully!"
+          echo "All checks passed"
