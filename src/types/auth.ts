@@ -549,10 +549,11 @@ export interface TokenValidationResult {
 /**
  * Password Validation Result
  * 
- * Represents the result of password validation against policy.
+ * Represents the result of password validation against strength requirements.
  * 
  * @property isValid - Whether the password meets all requirements
  * @property errors - Array of validation error messages
+ * @property strengthScore - Password strength score (0-100)
  */
 export interface PasswordValidationResult {
   /**
@@ -563,7 +564,52 @@ export interface PasswordValidationResult {
   /**
    * Array of validation error messages
    */
-  readonly errors: string[];
+  readonly errors: readonly string[];
+
+  /**
+   * Password strength score (0-100)
+   */
+  readonly strengthScore: number;
+}
+
+/**
+ * Password Hash Result
+ * 
+ * Represents the result of password hashing operation.
+ * 
+ * @property hash - Bcrypt hash of the password
+ * @property executionTimeMs - Time taken to hash the password in milliseconds
+ */
+export interface PasswordHashResult {
+  /**
+   * Bcrypt hash of the password
+   */
+  readonly hash: string;
+
+  /**
+   * Time taken to hash the password in milliseconds
+   */
+  readonly executionTimeMs: number;
+}
+
+/**
+ * Password Comparison Result
+ * 
+ * Represents the result of password comparison operation.
+ * 
+ * @property match - Whether the password matches the hash
+ * @property executionTimeMs - Time taken to compare in milliseconds
+ */
+export interface PasswordComparisonResult {
+  /**
+   * Whether the password matches the hash
+   */
+  readonly match: boolean;
+
+  /**
+   * Time taken to compare in milliseconds
+   */
+  readonly executionTimeMs: number;
 }
 
 /**
