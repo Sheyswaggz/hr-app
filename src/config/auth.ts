@@ -1,46 +1,42 @@
 /**
- * Authentication Configuration Module
+ * Authentication Configuration
  * 
- * Centralized configuration for JWT authentication, password hashing,
- * rate limiting, and account security settings. All configuration values
- * are loaded from environment variables with secure defaults.
+ * Centralized authentication configuration including JWT settings, password policies,
+ * and security parameters. All configuration values are loaded from environment
+ * variables with secure defaults.
  * 
  * @module config/auth
  */
 
 /**
- * JWT token configuration interface
+ * JWT Configuration
+ * 
+ * Configuration for JSON Web Token generation and validation
  */
 export interface JWTConfig {
   /**
-   * Secret key for signing access tokens
+   * Secret key for signing JWT tokens
    * Must be at least 32 characters for security
    */
   readonly secret: string;
 
   /**
-   * Access token expiration time
-   * Format: Zeit/ms format (e.g., '15m', '1h', '24h')
+   * Access token expiration time in seconds
+   * Default: 15 minutes (900 seconds)
    */
-  readonly expiresIn: string;
+  readonly accessTokenExpiry: number;
 
   /**
-   * Refresh token secret key (separate from access token)
-   * Must be different from access token secret
+   * Refresh token expiration time in seconds
+   * Default: 7 days (604800 seconds)
    */
-  readonly refreshSecret: string;
+  readonly refreshTokenExpiry: number;
 
   /**
-   * Refresh token expiration time
-   * Format: Zeit/ms format (e.g., '7d', '30d')
+   * Password reset token expiration time in seconds
+   * Default: 1 hour (3600 seconds)
    */
-  readonly refreshExpiresIn: string;
-
-  /**
-   * JWT algorithm for token signing
-   * Using HS256 for symmetric key signing
-   */
-  readonly algorithm: 'HS256';
+  readonly passwordResetTokenExpiry: number;
 
   /**
    * Token issuer identifier
@@ -54,638 +50,437 @@ export interface JWTConfig {
 }
 
 /**
- * Password hashing configuration interface
+ * Password Policy Configuration
+ * 
+ * Configuration for password strength requirements and validation
  */
-export interface PasswordConfig {
+export interface PasswordPolicyConfig {
   /**
-   * Bcrypt salt rounds for password hashing
-   * Valid range: 10-15
-   * Higher values increase security but slow down hashing exponentially
-   */
-  readonly saltRounds: number;
-
-  /**
-   * Minimum password length requirement
+   * Minimum password length
+   * Default: 8 characters
    */
   readonly minLength: number;
 
   /**
-   * Require uppercase letter in password
+   * Maximum password length
+   * Default: 128 characters
+   */
+  readonly maxLength: number;
+
+  /**
+   * Require at least one uppercase letter
+   * Default: true
    */
   readonly requireUppercase: boolean;
 
   /**
-   * Require lowercase letter in password
+   * Require at least one lowercase letter
+   * Default: true
    */
   readonly requireLowercase: boolean;
 
   /**
-   * Require number in password
+   * Require at least one number
+   * Default: true
    */
-  readonly requireNumber: boolean;
+  readonly requireNumbers: boolean;
 
   /**
-   * Require special character in password
+   * Require at least one special character
+   * Default: true
    */
-  readonly requireSpecialChar: boolean;
+  readonly requireSpecialChars: boolean;
+
+  /**
+   * Bcrypt hash rounds for password hashing
+   * Default: 12 (good balance of security and performance)
+   * Range: 10-14 recommended
+   */
+  readonly bcryptRounds: number;
 }
 
 /**
- * Account lockout configuration interface
- */
-export interface AccountLockoutConfig {
-  /**
-   * Maximum failed login attempts before account lockout
-   * Set to 0 to disable account lockout feature
-   */
-  readonly maxAttempts: number;
-
-  /**
-   * Account lockout duration in milliseconds
-   * Account automatically unlocks after this duration
-   */
-  readonly lockoutDuration: number;
-
-  /**
-   * Time window for counting failed attempts (milliseconds)
-   * Failed attempts outside this window are not counted
-   */
-  readonly attemptWindow: number;
-}
-
-/**
- * Rate limiting configuration interface
- */
-export interface RateLimitConfig {
-  /**
-   * Maximum number of requests per window per IP
-   */
-  readonly maxRequests: number;
-
-  /**
-   * Time window for rate limiting in milliseconds
-   */
-  readonly windowMs: number;
-
-  /**
-   * Whether to skip rate limiting for successful requests
-   */
-  readonly skipSuccessfulRequests: boolean;
-
-  /**
-   * Whether to skip rate limiting for failed requests
-   */
-  readonly skipFailedRequests: boolean;
-
-  /**
-   * Custom message when rate limit is exceeded
-   */
-  readonly message: string;
-}
-
-/**
- * Session configuration interface
+ * Session Configuration
+ * 
+ * Configuration for user session management
  */
 export interface SessionConfig {
   /**
-   * Session timeout in milliseconds
-   * User must re-authenticate after this duration of inactivity
+   * Maximum number of concurrent sessions per user
+   * Default: 5
    */
-  readonly timeout: number;
+  readonly maxConcurrentSessions: number;
 
   /**
-   * Whether to use sliding session expiration
-   * If true, session timeout resets on each request
+   * Session inactivity timeout in seconds
+   * Default: 30 minutes (1800 seconds)
    */
-  readonly sliding: boolean;
+  readonly inactivityTimeout: number;
 
   /**
-   * Maximum session lifetime in milliseconds
-   * Absolute maximum time before re-authentication required
+   * Enable session tracking
+   * Default: true
    */
-  readonly maxLifetime: number;
+  readonly enableTracking: boolean;
 }
 
 /**
- * Password reset configuration interface
+ * Rate Limiting Configuration
+ * 
+ * Configuration for API rate limiting to prevent abuse
  */
-export interface PasswordResetConfig {
+export interface RateLimitConfig {
   /**
-   * Password reset token expiration time in milliseconds
+   * Maximum login attempts per IP address
+   * Default: 5 attempts
    */
-  readonly tokenExpiration: number;
+  readonly maxLoginAttempts: number;
 
   /**
-   * Length of password reset token
+   * Login attempt window in seconds
+   * Default: 15 minutes (900 seconds)
    */
-  readonly tokenLength: number;
+  readonly loginAttemptWindow: number;
 
   /**
-   * Maximum number of password reset attempts per time window
+   * Maximum API requests per IP address
+   * Default: 100 requests
    */
-  readonly maxAttempts: number;
+  readonly maxApiRequests: number;
 
   /**
-   * Time window for password reset attempts in milliseconds
+   * API request window in seconds
+   * Default: 15 minutes (900 seconds)
    */
-  readonly attemptWindow: number;
+  readonly apiRequestWindow: number;
 }
 
 /**
- * Complete authentication configuration interface
+ * Complete Authentication Configuration
  */
 export interface AuthConfig {
-  /**
-   * JWT token configuration
-   */
   readonly jwt: JWTConfig;
-
-  /**
-   * Password hashing configuration
-   */
-  readonly password: PasswordConfig;
-
-  /**
-   * Account lockout configuration
-   */
-  readonly accountLockout: AccountLockoutConfig;
-
-  /**
-   * Rate limiting configuration
-   */
-  readonly rateLimit: RateLimitConfig;
-
-  /**
-   * Session configuration
-   */
+  readonly passwordPolicy: PasswordPolicyConfig;
   readonly session: SessionConfig;
-
-  /**
-   * Password reset configuration
-   */
-  readonly passwordReset: PasswordResetConfig;
-
-  /**
-   * Whether authentication system is enabled
-   * Master kill switch for emergency maintenance
-   */
-  readonly enabled: boolean;
-
-  /**
-   * Current environment
-   */
-  readonly environment: 'development' | 'staging' | 'production' | 'test';
+  readonly rateLimit: RateLimitConfig;
 }
 
 /**
- * Validation result interface
- */
-interface ValidationResult {
-  readonly valid: boolean;
-  readonly errors: string[];
-}
-
-/**
- * Load and validate JWT configuration from environment variables
+ * Load JWT Configuration
+ * 
+ * Loads JWT configuration from environment variables with validation
  */
 function loadJWTConfig(): JWTConfig {
-  const secret = process.env.JWT_SECRET || '';
-  const refreshSecret = process.env.REFRESH_TOKEN_SECRET || '';
-  const expiresIn = process.env.JWT_EXPIRES_IN || '24h';
-  const refreshExpiresIn = process.env.REFRESH_TOKEN_EXPIRES_IN || '7d';
+  const secret = process.env.JWT_SECRET;
 
-  // Validate secrets in production
-  if (process.env.NODE_ENV === 'production') {
-    if (!secret || secret.length < 32) {
-      throw new Error(
-        '[AUTH_CONFIG] JWT_SECRET must be at least 32 characters in production'
-      );
-    }
-    if (!refreshSecret || refreshSecret.length < 32) {
-      throw new Error(
-        '[AUTH_CONFIG] REFRESH_TOKEN_SECRET must be at least 32 characters in production'
-      );
-    }
-    if (secret === refreshSecret) {
-      throw new Error(
-        '[AUTH_CONFIG] JWT_SECRET and REFRESH_TOKEN_SECRET must be different'
-      );
-    }
-  }
-
-  return {
-    secret: secret || 'development-jwt-secret-min-32-chars-long-for-security',
-    expiresIn,
-    refreshSecret: refreshSecret || 'development-refresh-secret-min-32-chars-long-for-security',
-    refreshExpiresIn,
-    algorithm: 'HS256',
-    issuer: 'hr-app',
-    audience: 'hr-app-users',
-  };
-}
-
-/**
- * Load and validate password configuration from environment variables
- */
-function loadPasswordConfig(): PasswordConfig {
-  const saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS || '10', 10);
-
-  // Validate salt rounds
-  if (saltRounds < 10 || saltRounds > 15) {
-    console.warn(
-      `[AUTH_CONFIG] BCRYPT_SALT_ROUNDS should be between 10 and 15, got ${saltRounds}. Using default: 10`
+  if (!secret) {
+    throw new Error(
+      'JWT_SECRET environment variable is required. ' +
+        'Generate a secure secret with: openssl rand -base64 32'
     );
   }
 
-  return {
-    saltRounds: Math.max(10, Math.min(15, saltRounds)),
-    minLength: 8,
-    requireUppercase: true,
-    requireLowercase: true,
-    requireNumber: true,
-    requireSpecialChar: false, // Optional for better UX
-  };
-}
+  if (secret.length < 32) {
+    throw new Error(
+      'JWT_SECRET must be at least 32 characters long for security. ' +
+        'Current length: ' +
+        secret.length
+    );
+  }
 
-/**
- * Load and validate account lockout configuration from environment variables
- */
-function loadAccountLockoutConfig(): AccountLockoutConfig {
-  const maxAttempts = parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5', 10);
-  const lockoutDuration = parseInt(
-    process.env.ACCOUNT_LOCKOUT_DURATION || '900000',
+  const accessTokenExpiry = parseInt(
+    process.env.JWT_ACCESS_TOKEN_EXPIRY || '900',
     10
-  ); // 15 minutes default
-
-  // Validate configuration
-  if (maxAttempts < 0) {
-    console.warn(
-      `[AUTH_CONFIG] MAX_LOGIN_ATTEMPTS cannot be negative, got ${maxAttempts}. Using default: 5`
-    );
-  }
-
-  if (lockoutDuration < 60000) {
-    console.warn(
-      `[AUTH_CONFIG] ACCOUNT_LOCKOUT_DURATION should be at least 60000ms (1 minute), got ${lockoutDuration}. Using default: 900000ms`
-    );
-  }
-
-  return {
-    maxAttempts: Math.max(0, maxAttempts),
-    lockoutDuration: Math.max(60000, lockoutDuration),
-    attemptWindow: 3600000, // 1 hour window for counting attempts
-  };
-}
-
-/**
- * Load and validate rate limiting configuration from environment variables
- */
-function loadRateLimitConfig(): RateLimitConfig {
-  const maxRequests = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
-  const windowMs = parseInt(
-    process.env.RATE_LIMIT_WINDOW_MS || '900000',
+  );
+  const refreshTokenExpiry = parseInt(
+    process.env.JWT_REFRESH_TOKEN_EXPIRY || '604800',
     10
-  ); // 15 minutes default
+  );
+  const passwordResetTokenExpiry = parseInt(
+    process.env.JWT_PASSWORD_RESET_TOKEN_EXPIRY || '3600',
+    10
+  );
 
-  // Validate configuration
-  if (maxRequests < 1) {
-    console.warn(
-      `[AUTH_CONFIG] RATE_LIMIT_MAX must be at least 1, got ${maxRequests}. Using default: 100`
-    );
+  if (accessTokenExpiry < 60) {
+    throw new Error('JWT_ACCESS_TOKEN_EXPIRY must be at least 60 seconds');
   }
 
-  if (windowMs < 60000) {
-    console.warn(
-      `[AUTH_CONFIG] RATE_LIMIT_WINDOW_MS should be at least 60000ms (1 minute), got ${windowMs}. Using default: 900000ms`
-    );
+  if (refreshTokenExpiry < 3600) {
+    throw new Error('JWT_REFRESH_TOKEN_EXPIRY must be at least 3600 seconds (1 hour)');
+  }
+
+  if (passwordResetTokenExpiry < 300) {
+    throw new Error('JWT_PASSWORD_RESET_TOKEN_EXPIRY must be at least 300 seconds (5 minutes)');
   }
 
   return {
-    maxRequests: Math.max(1, maxRequests),
-    windowMs: Math.max(60000, windowMs),
-    skipSuccessfulRequests: false,
-    skipFailedRequests: false,
-    message: 'Too many requests from this IP, please try again later',
+    secret,
+    accessTokenExpiry,
+    refreshTokenExpiry,
+    passwordResetTokenExpiry,
+    issuer: process.env.JWT_ISSUER || 'hr-app',
+    audience: process.env.JWT_AUDIENCE || 'hr-app-users',
   };
 }
 
 /**
- * Load and validate session configuration from environment variables
+ * Load Password Policy Configuration
+ * 
+ * Loads password policy configuration from environment variables
+ */
+function loadPasswordPolicyConfig(): PasswordPolicyConfig {
+  const minLength = parseInt(process.env.PASSWORD_MIN_LENGTH || '8', 10);
+  const maxLength = parseInt(process.env.PASSWORD_MAX_LENGTH || '128', 10);
+  const bcryptRounds = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
+
+  if (minLength < 8) {
+    throw new Error('PASSWORD_MIN_LENGTH must be at least 8 characters');
+  }
+
+  if (maxLength < minLength) {
+    throw new Error('PASSWORD_MAX_LENGTH must be greater than PASSWORD_MIN_LENGTH');
+  }
+
+  if (bcryptRounds < 10 || bcryptRounds > 14) {
+    throw new Error('BCRYPT_ROUNDS must be between 10 and 14');
+  }
+
+  return {
+    minLength,
+    maxLength,
+    requireUppercase: process.env.PASSWORD_REQUIRE_UPPERCASE !== 'false',
+    requireLowercase: process.env.PASSWORD_REQUIRE_LOWERCASE !== 'false',
+    requireNumbers: process.env.PASSWORD_REQUIRE_NUMBERS !== 'false',
+    requireSpecialChars: process.env.PASSWORD_REQUIRE_SPECIAL_CHARS !== 'false',
+    bcryptRounds,
+  };
+}
+
+/**
+ * Load Session Configuration
+ * 
+ * Loads session configuration from environment variables
  */
 function loadSessionConfig(): SessionConfig {
-  const timeout = parseInt(
-    process.env.SESSION_TIMEOUT || '3600000',
+  const maxConcurrentSessions = parseInt(
+    process.env.MAX_CONCURRENT_SESSIONS || '5',
     10
-  ); // 1 hour default
+  );
+  const inactivityTimeout = parseInt(
+    process.env.SESSION_INACTIVITY_TIMEOUT || '1800',
+    10
+  );
 
-  // Validate configuration
-  if (timeout < 300000) {
-    console.warn(
-      `[AUTH_CONFIG] SESSION_TIMEOUT should be at least 300000ms (5 minutes), got ${timeout}. Using default: 3600000ms`
-    );
+  if (maxConcurrentSessions < 1) {
+    throw new Error('MAX_CONCURRENT_SESSIONS must be at least 1');
+  }
+
+  if (inactivityTimeout < 300) {
+    throw new Error('SESSION_INACTIVITY_TIMEOUT must be at least 300 seconds (5 minutes)');
   }
 
   return {
-    timeout: Math.max(300000, timeout),
-    sliding: true,
-    maxLifetime: 86400000, // 24 hours absolute maximum
+    maxConcurrentSessions,
+    inactivityTimeout,
+    enableTracking: process.env.SESSION_TRACKING_ENABLED !== 'false',
   };
 }
 
 /**
- * Load and validate password reset configuration
+ * Load Rate Limiting Configuration
+ * 
+ * Loads rate limiting configuration from environment variables
  */
-function loadPasswordResetConfig(): PasswordResetConfig {
+function loadRateLimitConfig(): RateLimitConfig {
+  const maxLoginAttempts = parseInt(
+    process.env.MAX_LOGIN_ATTEMPTS || '5',
+    10
+  );
+  const loginAttemptWindow = parseInt(
+    process.env.LOGIN_ATTEMPT_WINDOW || '900',
+    10
+  );
+  const maxApiRequests = parseInt(
+    process.env.MAX_API_REQUESTS || '100',
+    10
+  );
+  const apiRequestWindow = parseInt(
+    process.env.API_REQUEST_WINDOW || '900',
+    10
+  );
+
+  if (maxLoginAttempts < 1) {
+    throw new Error('MAX_LOGIN_ATTEMPTS must be at least 1');
+  }
+
+  if (loginAttemptWindow < 60) {
+    throw new Error('LOGIN_ATTEMPT_WINDOW must be at least 60 seconds');
+  }
+
+  if (maxApiRequests < 1) {
+    throw new Error('MAX_API_REQUESTS must be at least 1');
+  }
+
+  if (apiRequestWindow < 60) {
+    throw new Error('API_REQUEST_WINDOW must be at least 60 seconds');
+  }
+
   return {
-    tokenExpiration: 3600000, // 1 hour
-    tokenLength: 32,
-    maxAttempts: 3,
-    attemptWindow: 3600000, // 1 hour
+    maxLoginAttempts,
+    loginAttemptWindow,
+    maxApiRequests,
+    apiRequestWindow,
   };
 }
 
 /**
- * Validate complete authentication configuration
+ * Load Complete Authentication Configuration
+ * 
+ * Loads all authentication configuration from environment variables
  */
-function validateAuthConfig(config: AuthConfig): ValidationResult {
-  const errors: string[] = [];
+export function loadAuthConfig(): AuthConfig {
+  try {
+    const config: AuthConfig = {
+      jwt: loadJWTConfig(),
+      passwordPolicy: loadPasswordPolicyConfig(),
+      session: loadSessionConfig(),
+      rateLimit: loadRateLimitConfig(),
+    };
 
-  // Validate JWT configuration
-  if (config.jwt.secret.length < 32) {
-    errors.push('JWT secret must be at least 32 characters');
-  }
+    console.log('[AUTH_CONFIG] Authentication configuration loaded successfully:', {
+      jwt: {
+        accessTokenExpiry: config.jwt.accessTokenExpiry,
+        refreshTokenExpiry: config.jwt.refreshTokenExpiry,
+        passwordResetTokenExpiry: config.jwt.passwordResetTokenExpiry,
+        issuer: config.jwt.issuer,
+        audience: config.jwt.audience,
+      },
+      passwordPolicy: {
+        minLength: config.passwordPolicy.minLength,
+        maxLength: config.passwordPolicy.maxLength,
+        requireUppercase: config.passwordPolicy.requireUppercase,
+        requireLowercase: config.passwordPolicy.requireLowercase,
+        requireNumbers: config.passwordPolicy.requireNumbers,
+        requireSpecialChars: config.passwordPolicy.requireSpecialChars,
+        bcryptRounds: config.passwordPolicy.bcryptRounds,
+      },
+      session: {
+        maxConcurrentSessions: config.session.maxConcurrentSessions,
+        inactivityTimeout: config.session.inactivityTimeout,
+        enableTracking: config.session.enableTracking,
+      },
+      rateLimit: {
+        maxLoginAttempts: config.rateLimit.maxLoginAttempts,
+        loginAttemptWindow: config.rateLimit.loginAttemptWindow,
+        maxApiRequests: config.rateLimit.maxApiRequests,
+        apiRequestWindow: config.rateLimit.apiRequestWindow,
+      },
+    });
 
-  if (config.jwt.refreshSecret.length < 32) {
-    errors.push('Refresh token secret must be at least 32 characters');
-  }
-
-  if (config.jwt.secret === config.jwt.refreshSecret) {
-    errors.push('JWT secret and refresh token secret must be different');
-  }
-
-  // Validate password configuration
-  if (config.password.saltRounds < 10 || config.password.saltRounds > 15) {
-    errors.push('Bcrypt salt rounds must be between 10 and 15');
-  }
-
-  if (config.password.minLength < 8) {
-    errors.push('Minimum password length must be at least 8 characters');
-  }
-
-  // Validate account lockout configuration
-  if (config.accountLockout.maxAttempts < 0) {
-    errors.push('Maximum login attempts cannot be negative');
-  }
-
-  if (config.accountLockout.lockoutDuration < 60000) {
-    errors.push('Account lockout duration must be at least 60000ms (1 minute)');
-  }
-
-  // Validate rate limiting configuration
-  if (config.rateLimit.maxRequests < 1) {
-    errors.push('Rate limit max requests must be at least 1');
-  }
-
-  if (config.rateLimit.windowMs < 60000) {
-    errors.push('Rate limit window must be at least 60000ms (1 minute)');
-  }
-
-  // Validate session configuration
-  if (config.session.timeout < 300000) {
-    errors.push('Session timeout must be at least 300000ms (5 minutes)');
-  }
-
-  if (config.session.maxLifetime < config.session.timeout) {
-    errors.push('Session max lifetime must be greater than session timeout');
-  }
-
-  // Validate password reset configuration
-  if (config.passwordReset.tokenExpiration < 300000) {
-    errors.push('Password reset token expiration must be at least 300000ms (5 minutes)');
-  }
-
-  if (config.passwordReset.tokenLength < 16) {
-    errors.push('Password reset token length must be at least 16 characters');
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
-}
-
-/**
- * Load complete authentication configuration from environment variables
- */
-function loadAuthConfig(): AuthConfig {
-  const environment = (process.env.NODE_ENV || 'development') as
-    | 'development'
-    | 'staging'
-    | 'production'
-    | 'test';
-
-  const enabled = process.env.AUTH_ENABLED !== 'false';
-
-  console.log('[AUTH_CONFIG] Loading authentication configuration...', {
-    environment,
-    enabled,
-    timestamp: new Date().toISOString(),
-  });
-
-  const config: AuthConfig = {
-    jwt: loadJWTConfig(),
-    password: loadPasswordConfig(),
-    accountLockout: loadAccountLockoutConfig(),
-    rateLimit: loadRateLimitConfig(),
-    session: loadSessionConfig(),
-    passwordReset: loadPasswordResetConfig(),
-    enabled,
-    environment,
-  };
-
-  // Validate configuration
-  const validation = validateAuthConfig(config);
-  if (!validation.valid) {
-    const errorMessage = `[AUTH_CONFIG] Invalid authentication configuration:\n${validation.errors.join('\n')}`;
-    console.error(errorMessage, {
-      errors: validation.errors,
+    return config;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[AUTH_CONFIG] Failed to load authentication configuration:', {
+      error: errorMessage,
       timestamp: new Date().toISOString(),
     });
-    throw new Error(errorMessage);
+    throw new Error(`Authentication configuration error: ${errorMessage}`);
   }
-
-  console.log('[AUTH_CONFIG] Authentication configuration loaded successfully', {
-    environment,
-    enabled,
-    jwtExpiresIn: config.jwt.expiresIn,
-    refreshExpiresIn: config.jwt.refreshExpiresIn,
-    saltRounds: config.password.saltRounds,
-    maxLoginAttempts: config.accountLockout.maxAttempts,
-    lockoutDuration: config.accountLockout.lockoutDuration,
-    rateLimitMax: config.rateLimit.maxRequests,
-    rateLimitWindow: config.rateLimit.windowMs,
-    sessionTimeout: config.session.timeout,
-    timestamp: new Date().toISOString(),
-  });
-
-  return config;
 }
 
 /**
- * Singleton instance of authentication configuration
+ * Cached authentication configuration
  */
-let authConfigInstance: AuthConfig | null = null;
+let cachedConfig: AuthConfig | null = null;
 
 /**
- * Get authentication configuration singleton
+ * Get Authentication Configuration
  * 
- * @returns Authentication configuration object
- * @throws Error if configuration is invalid
+ * Returns cached authentication configuration or loads it if not cached
  */
 export function getAuthConfig(): AuthConfig {
-  if (!authConfigInstance) {
-    authConfigInstance = loadAuthConfig();
+  if (!cachedConfig) {
+    cachedConfig = loadAuthConfig();
   }
-  return authConfigInstance;
+  return cachedConfig;
 }
 
 /**
- * Reset authentication configuration singleton
- * Used primarily for testing purposes
- */
-export function resetAuthConfig(): void {
-  authConfigInstance = null;
-  console.log('[AUTH_CONFIG] Authentication configuration reset', {
-    timestamp: new Date().toISOString(),
-  });
-}
-
-/**
- * Check if authentication system is enabled
+ * Get JWT Configuration
  * 
- * @returns True if authentication is enabled, false otherwise
- */
-export function isAuthEnabled(): boolean {
-  return getAuthConfig().enabled;
-}
-
-/**
- * Get JWT configuration
- * 
- * @returns JWT configuration object
+ * Returns JWT configuration from cached auth config
  */
 export function getJWTConfig(): JWTConfig {
   return getAuthConfig().jwt;
 }
 
 /**
- * Get password configuration
+ * Get Password Policy Configuration
  * 
- * @returns Password configuration object
+ * Returns password policy configuration from cached auth config
  */
-export function getPasswordConfig(): PasswordConfig {
-  return getAuthConfig().password;
+export function getPasswordPolicyConfig(): PasswordPolicyConfig {
+  return getAuthConfig().passwordPolicy;
 }
 
 /**
- * Get account lockout configuration
+ * Get Session Configuration
  * 
- * @returns Account lockout configuration object
- */
-export function getAccountLockoutConfig(): AccountLockoutConfig {
-  return getAuthConfig().accountLockout;
-}
-
-/**
- * Get rate limiting configuration
- * 
- * @returns Rate limiting configuration object
- */
-export function getRateLimitConfig(): RateLimitConfig {
-  return getAuthConfig().rateLimit;
-}
-
-/**
- * Get session configuration
- * 
- * @returns Session configuration object
+ * Returns session configuration from cached auth config
  */
 export function getSessionConfig(): SessionConfig {
   return getAuthConfig().session;
 }
 
 /**
- * Get password reset configuration
+ * Get Rate Limit Configuration
  * 
- * @returns Password reset configuration object
+ * Returns rate limit configuration from cached auth config
  */
-export function getPasswordResetConfig(): PasswordResetConfig {
-  return getAuthConfig().passwordReset;
+export function getRateLimitConfig(): RateLimitConfig {
+  return getAuthConfig().rateLimit;
 }
 
 /**
- * Validate password against configured requirements
+ * Reset Configuration Cache
  * 
- * @param password - Password to validate
- * @returns Validation result with errors if any
+ * Clears cached configuration, forcing reload on next access
+ * Useful for testing or configuration updates
  */
-export function validatePassword(password: string): ValidationResult {
-  const config = getPasswordConfig();
-  const errors: string[] = [];
-
-  if (password.length < config.minLength) {
-    errors.push(`Password must be at least ${config.minLength} characters long`);
-  }
-
-  if (config.requireUppercase && !/[A-Z]/.test(password)) {
-    errors.push('Password must contain at least one uppercase letter');
-  }
-
-  if (config.requireLowercase && !/[a-z]/.test(password)) {
-    errors.push('Password must contain at least one lowercase letter');
-  }
-
-  if (config.requireNumber && !/\d/.test(password)) {
-    errors.push('Password must contain at least one number');
-  }
-
-  if (config.requireSpecialChar && !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
-    errors.push('Password must contain at least one special character');
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
+export function resetConfigCache(): void {
+  cachedConfig = null;
+  console.log('[AUTH_CONFIG] Configuration cache cleared');
 }
 
 /**
- * Get masked configuration for logging (hides sensitive values)
+ * Validate Configuration
  * 
- * @returns Masked configuration object safe for logging
+ * Validates that all required configuration is present and valid
+ * Throws error if configuration is invalid
  */
-export function getMaskedConfig(): Record<string, unknown> {
-  const config = getAuthConfig();
-
-  return {
-    jwt: {
-      secret: '***',
-      expiresIn: config.jwt.expiresIn,
-      refreshSecret: '***',
-      refreshExpiresIn: config.jwt.refreshExpiresIn,
-      algorithm: config.jwt.algorithm,
-      issuer: config.jwt.issuer,
-      audience: config.jwt.audience,
-    },
-    password: config.password,
-    accountLockout: config.accountLockout,
-    rateLimit: config.rateLimit,
-    session: config.session,
-    passwordReset: config.passwordReset,
-    enabled: config.enabled,
-    environment: config.environment,
-  };
+export function validateConfig(): void {
+  try {
+    getAuthConfig();
+    console.log('[AUTH_CONFIG] Configuration validation successful');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('[AUTH_CONFIG] Configuration validation failed:', {
+      error: errorMessage,
+      timestamp: new Date().toISOString(),
+    });
+    throw error;
+  }
 }
 
-// Export default configuration instance
-export default getAuthConfig();
+/**
+ * Export default configuration getter
+ */
+export default {
+  getAuthConfig,
+  getJWTConfig,
+  getPasswordPolicyConfig,
+  getSessionConfig,
+  getRateLimitConfig,
+  resetConfigCache,
+  validateConfig,
+};
