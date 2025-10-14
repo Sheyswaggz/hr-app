@@ -10,7 +10,6 @@
  */
 
 import { randomBytes } from 'crypto';
-import jwt from 'jsonwebtoken';
 
 import { executeQuery, executeTransaction, queryOne } from '../db/index.js';
 import { type UserRole } from '../types/index.js';
@@ -23,12 +22,14 @@ import {
   type PasswordResetTokenPayload,
   type RegisterData,
   type TokenPair,
-  type RefreshTokenPayload,
 } from '../types/auth.js';
 import { hashPassword, comparePassword, validatePassword } from '../utils/password.js';
 import {
-  verifyToken,
+  generateAccessToken,
+  generateRefreshToken,
   verifyRefreshToken,
+  generatePasswordResetToken,
+  verifyPasswordResetToken,
 } from '../utils/jwt.js';
 import { getJWTConfig } from '../config/auth.js';
 
@@ -219,8 +220,8 @@ export class AuthService {
         );
       }
 
-      // Hash password
-      const passwordHashResult = await hashPassword(data.password);
+      // Hash password - returns string directly
+      const passwordHash = await hashPassword(data.password);
 
       // Create user in transaction
       const user = await executeTransaction<UserRecord>(
@@ -233,7 +234,7 @@ export class AuthService {
             RETURNING *`,
             [
               data.email.toLowerCase(),
-              passwordHashResult.hash,
+              passwordHash,
               data.firstName.trim(),
               data.lastName.trim(),
               data.role,
@@ -405,13 +406,13 @@ export class AuthService {
         );
       }
 
-      // Verify password
-      const passwordComparison = await comparePassword(
+      // Verify password - returns boolean directly
+      const passwordMatch = await comparePassword(
         credentials.password,
         user.password_hash
       );
 
-      if (!passwordComparison.match) {
+      if (!passwordMatch) {
         // Increment failed login attempts
         await this.handleFailedLogin(user, { correlationId });
 
@@ -517,8 +518,8 @@ export class AuthService {
         timestamp: new Date().toISOString(),
       });
 
-      // Verify refresh token (returns RefreshTokenPayload synchronously)
-      const payload: RefreshTokenPayload = verifyRefreshToken(refreshToken);
+      // Verify refresh token
+      const payload = verifyRefreshToken(refreshToken, { correlationId });
 
       // Check if token is blacklisted
       const isBlacklisted = await this.isTokenBlacklisted(payload.tokenId, {
@@ -648,8 +649,8 @@ export class AuthService {
         timestamp: new Date().toISOString(),
       });
 
-      // Verify refresh token (returns RefreshTokenPayload synchronously)
-      const payload: RefreshTokenPayload = verifyRefreshToken(refreshToken);
+      // Verify refresh token
+      const payload = verifyRefreshToken(refreshToken, { correlationId });
 
       // Add token to blacklist
       await executeQuery(
@@ -755,24 +756,17 @@ export class AuthService {
 
       // Generate password reset token
       const tokenId = randomBytes(16).toString('hex');
-      const config = getJWTConfig();
-      
-      const resetToken = jwt.sign(
+      const resetToken = generatePasswordResetToken(
         {
           userId: user.id,
           email: user.email,
           tokenId,
-          purpose: 'password_reset',
         },
-        config.secret,
-        {
-          expiresIn: config.passwordResetTokenExpiry,
-          issuer: config.issuer,
-          audience: config.audience,
-        }
+        { correlationId }
       );
 
-      const expiresAt = new Date(Date.now() + config.passwordResetTokenExpiry * 1000);
+      // Use 1 hour expiration (3600 seconds)
+      const expiresAt = new Date(Date.now() + 3600000);
 
       // Store token in database
       await executeQuery(
@@ -843,20 +837,7 @@ export class AuthService {
       });
 
       // Verify token signature and expiration
-      const config = getJWTConfig();
-      const decoded = jwt.verify(token, config.secret, {
-        issuer: config.issuer,
-        audience: config.audience,
-      }) as any;
-
-      const payload: PasswordResetTokenPayload = {
-        userId: decoded.userId,
-        email: decoded.email,
-        tokenId: decoded.tokenId,
-        iat: decoded.iat,
-        exp: decoded.exp,
-        purpose: 'password_reset',
-      };
+      const payload = verifyPasswordResetToken(token, { correlationId });
 
       // Check if token exists and is not used
       const tokenRecord = await queryOne<PasswordResetTokenRecord>(
@@ -979,8 +960,8 @@ export class AuthService {
         );
       }
 
-      // Hash new password
-      const passwordHashResult = await hashPassword(confirmation.newPassword);
+      // Hash new password - returns string directly
+      const passwordHash = await hashPassword(confirmation.newPassword);
 
       // Update password and mark token as used in transaction
       await executeTransaction(
@@ -988,7 +969,7 @@ export class AuthService {
           // Update user password
           await client.query(
             'UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2',
-            [passwordHashResult.hash, payload.userId]
+            [passwordHash, payload.userId]
           );
 
           // Mark token as used
@@ -1060,43 +1041,31 @@ export class AuthService {
       const tokenId = randomBytes(16).toString('hex');
       const config = getJWTConfig();
 
-      // Generate access token
-      const accessToken = jwt.sign(
+      const accessToken = generateAccessToken(
         {
           userId: user.id,
           email: user.email,
           role: user.role,
-          tokenType: 'access',
         },
-        config.secret,
-        {
-          expiresIn: config.accessTokenExpiry,
-          issuer: config.issuer,
-          audience: config.audience,
-        }
+        { correlationId }
       );
 
-      // Generate refresh token
-      const refreshToken = jwt.sign(
+      const refreshToken = generateRefreshToken(
         {
           userId: user.id,
           email: user.email,
-          role: user.role,
           tokenId,
-          tokenType: 'refresh',
         },
-        config.secret,
-        {
-          expiresIn: config.refreshTokenExpiry,
-          issuer: config.issuer,
-          audience: config.audience,
-        }
+        { correlationId }
       );
+
+      // Parse expiresIn string to seconds (e.g., '24h' -> 86400)
+      const expiresIn = this.parseExpiresIn(config.expiresIn);
 
       return {
         accessToken,
         refreshToken,
-        expiresIn: config.accessTokenExpiry,
+        expiresIn,
         tokenType: 'Bearer',
       };
     } catch (error) {
@@ -1110,6 +1079,35 @@ export class AuthService {
       });
 
       throw new Error(`Token generation failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Parse expiresIn string to seconds
+   * 
+   * @param expiresIn - Expiration string (e.g., '24h', '7d', '15m')
+   * @returns Expiration time in seconds
+   */
+  private parseExpiresIn(expiresIn: string): number {
+    const match = expiresIn.match(/^(\d+)([smhd])$/);
+    if (!match) {
+      return 86400; // Default to 24 hours
+    }
+
+    const value = parseInt(match[1]!, 10);
+    const unit = match[2];
+
+    switch (unit) {
+      case 's':
+        return value;
+      case 'm':
+        return value * 60;
+      case 'h':
+        return value * 3600;
+      case 'd':
+        return value * 86400;
+      default:
+        return 86400;
     }
   }
 
