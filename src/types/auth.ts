@@ -547,6 +547,26 @@ export interface TokenValidationResult {
 }
 
 /**
+ * Password Validation Result
+ * 
+ * Represents the result of password validation against policy.
+ * 
+ * @property isValid - Whether the password meets all requirements
+ * @property errors - Array of validation error messages
+ */
+export interface PasswordValidationResult {
+  /**
+   * Whether the password meets all requirements
+   */
+  readonly isValid: boolean;
+
+  /**
+   * Array of validation error messages
+   */
+  readonly errors: string[];
+}
+
+/**
  * Type guard to check if a value is a valid JWTPayload
  * 
  * @param value - Value to check
