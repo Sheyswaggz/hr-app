@@ -25,11 +25,8 @@ import {
 } from '../types/auth.js';
 import { hashPassword, comparePassword, validatePassword } from '../utils/password.js';
 import {
-  generateAccessToken,
-  generateRefreshToken,
-  verifyRefreshToken,
-  generatePasswordResetToken,
-  verifyPasswordResetToken,
+  generateToken,
+  verifyToken,
 } from '../utils/jwt.js';
 import { getJWTConfig } from '../config/auth.js';
 
@@ -519,10 +516,10 @@ export class AuthService {
       });
 
       // Verify refresh token
-      const payload = verifyRefreshToken(refreshToken, { correlationId });
+      const payload = verifyToken(refreshToken, 'refresh', { correlationId });
 
       // Check if token is blacklisted
-      const isBlacklisted = await this.isTokenBlacklisted(payload.tokenId, {
+      const isBlacklisted = await this.isTokenBlacklisted(payload.tokenId!, {
         correlationId,
       });
 
@@ -650,7 +647,7 @@ export class AuthService {
       });
 
       // Verify refresh token
-      const payload = verifyRefreshToken(refreshToken, { correlationId });
+      const payload = verifyToken(refreshToken, 'refresh', { correlationId });
 
       // Add token to blacklist
       await executeQuery(
@@ -756,12 +753,13 @@ export class AuthService {
 
       // Generate password reset token
       const tokenId = randomBytes(16).toString('hex');
-      const resetToken = generatePasswordResetToken(
+      const resetToken = generateToken(
         {
           userId: user.id,
           email: user.email,
           tokenId,
         },
+        'reset',
         { correlationId }
       );
 
@@ -837,7 +835,7 @@ export class AuthService {
       });
 
       // Verify token signature and expiration
-      const payload = verifyPasswordResetToken(token, { correlationId });
+      const payload = verifyToken(token, 'reset', { correlationId });
 
       // Check if token exists and is not used
       const tokenRecord = await queryOne<PasswordResetTokenRecord>(
@@ -884,7 +882,7 @@ export class AuthService {
         timestamp: new Date().toISOString(),
       });
 
-      return payload;
+      return payload as PasswordResetTokenPayload;
     } catch (error) {
       const executionTimeMs = Date.now() - startTime;
 
@@ -1040,21 +1038,23 @@ export class AuthService {
     try {
       const tokenId = randomBytes(16).toString('hex');
 
-      const accessToken = generateAccessToken(
+      const accessToken = generateToken(
         {
           userId: user.id,
           email: user.email,
           role: user.role,
         },
+        'access',
         { correlationId }
       );
 
-      const refreshToken = generateRefreshToken(
+      const refreshToken = generateToken(
         {
           userId: user.id,
           email: user.email,
           tokenId,
         },
+        'refresh',
         { correlationId }
       );
 
