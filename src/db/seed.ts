@@ -29,7 +29,7 @@ interface SeedMetadata {
   /**
    * Number of records to seed
    */
-  readonly recordCount: number;
+  recordCount: number;
 
   /**
    * Timestamp when seed was executed
