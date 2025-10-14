@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "Node16",
+    "moduleResolution": "node16",
     "resolveJsonModule": true,
     "allowJs": false,
     "checkJs": false,
@@ -54,19 +54,19 @@
       "@middleware/*": ["./src/middleware/*"],
       "@routes/*": ["./src/routes/*"],
       "@db/*": ["./src/db/*"]
-    }
+    },
+    "types": ["node", "vitest/globals"]
   },
   "include": [
     "src/**/*",
     "src/**/*.ts",
-    "src/**/*.d.ts"
+    "src/**/*.d.ts",
+    "tests/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "build",
-    "**/*.test.ts",
-    "**/*.spec.ts",
     "coverage"
   ],
   "ts-node": {
