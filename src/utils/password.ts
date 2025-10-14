@@ -1,9 +1,9 @@
+import { type PasswordValidationResult } from '../types/auth.js';
+import { getPasswordPolicyConfig } from '../config/auth.js';
 import bcrypt from 'bcrypt';
-import type { PasswordValidationResult } from '../types/auth.js';
-import getPasswordConfig from '../config/auth.js';
 
 export async function hashPassword(password: string): Promise<string> {
-  const config = getPasswordConfig();
+  const config = getPasswordPolicyConfig();
   return bcrypt.hash(password, config.saltRounds);
 }
 
@@ -15,11 +15,11 @@ export async function comparePassword(
 }
 
 export function validatePassword(password: string): PasswordValidationResult {
-  const config = getPasswordConfig();
+  const config = getPasswordPolicyConfig();
   const errors: string[] = [];
 
   if (password.length < config.minLength) {
-    errors.push(`Password must be at least ${config.minLength} characters long`);
+    errors.push(`Password must be at least ${config.minLength} characters`);
   }
 
   if (config.requireUppercase && !/[A-Z]/.test(password)) {
