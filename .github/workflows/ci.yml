@@ -87,13 +87,13 @@ jobs:
           path: |
             node_modules
             ~/.npm
-          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
           restore-keys: |
             ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-
 
       - name: Install dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm ci --prefer-offline --no-audit
+        run: npm install --prefer-offline --no-audit
 
       - name: Verify installation
         run: |
@@ -122,7 +122,10 @@ jobs:
           path: |
             node_modules
             ~/.npm
-          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+
+      - name: Install dependencies if cache miss
+        run: npm install --prefer-offline --no-audit
 
       - name: Run ESLint
         run: npm run lint
@@ -154,7 +157,10 @@ jobs:
           path: |
             node_modules
             ~/.npm
-          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+
+      - name: Install dependencies if cache miss
+        run: npm install --prefer-offline --no-audit
 
       - name: Run TypeScript compiler
         run: npm run type-check
@@ -188,7 +194,10 @@ jobs:
           path: |
             node_modules
             ~/.npm
-          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+
+      - name: Install dependencies if cache miss
+        run: npm install --prefer-offline --no-audit
 
       - name: Run unit tests
         run: npm run test -- --coverage --testPathPattern="tests/unit"
@@ -246,7 +255,10 @@ jobs:
           path: |
             node_modules
             ~/.npm
-          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+
+      - name: Install dependencies if cache miss
+        run: npm install --prefer-offline --no-audit
 
       - name: Wait for PostgreSQL
         run: |
@@ -315,7 +327,10 @@ jobs:
           path: |
             node_modules
             ~/.npm
-          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+
+      - name: Install dependencies if cache miss
+        run: npm install --prefer-offline --no-audit
 
       - name: Run database migrations
         run: npm run migrate:up
@@ -378,7 +393,10 @@ jobs:
           path: |
             node_modules
             ~/.npm
-          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+
+      - name: Install dependencies if cache miss
+        run: npm install --prefer-offline --no-audit
 
       - name: Run database tests
         run: npm run test:db
@@ -415,7 +433,10 @@ jobs:
           path: |
             node_modules
             ~/.npm
-          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+
+      - name: Install dependencies if cache miss
+        run: npm install --prefer-offline --no-audit
 
       - name: Build application
         run: npm run build
