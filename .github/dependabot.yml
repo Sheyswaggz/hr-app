@@ -1,0 +1,223 @@
+# ============================================================
+# Dependabot Configuration for Automated Dependency Updates
+# ============================================================
+# This configuration enables automated dependency updates for npm packages
+# in the HR application. Dependabot will check for updates weekly and create
+# pull requests with appropriate grouping and labeling.
+#
+# Documentation: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# ============================================================
+
+version: 2
+
+# ============================================================
+# Update Configuration
+# ============================================================
+updates:
+  # ------------------------------------------------------------
+  # NPM Package Updates
+  # ------------------------------------------------------------
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      # Check for updates every Monday at 9:00 AM UTC
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    
+    # ------------------------------------------------------------
+    # Pull Request Configuration
+    # ------------------------------------------------------------
+    open-pull-requests-limit: 10
+    
+    # Pull request labels for easy filtering and automation
+    labels:
+      - "dependencies"
+      - "npm"
+      - "automated"
+    
+    # Assign reviewers for dependency updates
+    reviewers:
+      - "hr-app-maintainers"
+    
+    # Set milestone for tracking
+    milestone: "Dependency Updates"
+    
+    # ------------------------------------------------------------
+    # Commit Message Configuration
+    # ------------------------------------------------------------
+    commit-message:
+      # Prefix for commit messages
+      prefix: "chore(deps)"
+      # Include dependency name in commit message
+      include: "scope"
+    
+    # ------------------------------------------------------------
+    # Grouping Strategy
+    # ------------------------------------------------------------
+    # Group minor and patch updates together to reduce PR noise
+    groups:
+      # Development dependencies - minor and patch updates
+      development-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      
+      # Production dependencies - minor and patch updates
+      production-dependencies:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      
+      # TypeScript ecosystem updates
+      typescript-ecosystem:
+        patterns:
+          - "typescript"
+          - "@types/*"
+          - "ts-*"
+        update-types:
+          - "minor"
+          - "patch"
+      
+      # Testing framework updates
+      testing-frameworks:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "jest"
+          - "@jest/*"
+        update-types:
+          - "minor"
+          - "patch"
+      
+      # Linting and formatting tools
+      linting-tools:
+        patterns:
+          - "eslint"
+          - "eslint-*"
+          - "@typescript-eslint/*"
+          - "prettier"
+        update-types:
+          - "minor"
+          - "patch"
+      
+      # React ecosystem updates
+      react-ecosystem:
+        patterns:
+          - "react"
+          - "react-*"
+          - "@types/react*"
+        update-types:
+          - "minor"
+          - "patch"
+      
+      # Build tools
+      build-tools:
+        patterns:
+          - "vite"
+          - "@vitejs/*"
+          - "webpack"
+          - "rollup"
+        update-types:
+          - "minor"
+          - "patch"
+    
+    # ------------------------------------------------------------
+    # Version Update Strategy
+    # ------------------------------------------------------------
+    # Allow both direct and indirect dependency updates
+    versioning-strategy: "auto"
+    
+    # ------------------------------------------------------------
+    # Ignore Configuration
+    # ------------------------------------------------------------
+    # Ignore specific dependencies or versions if needed
+    ignore:
+      # Example: Ignore major version updates for stable packages
+      # - dependency-name: "react"
+      #   update-types: ["version-update:semver-major"]
+      
+      # Example: Ignore specific versions with known issues
+      # - dependency-name: "package-name"
+      #   versions: ["1.2.3", "1.2.4"]
+    
+    # ------------------------------------------------------------
+    # Security Updates
+    # ------------------------------------------------------------
+    # Allow Dependabot to update dependencies with security vulnerabilities
+    # even if they would normally be ignored
+    allow:
+      - dependency-type: "all"
+    
+    # ------------------------------------------------------------
+    # Rebase Strategy
+    # ------------------------------------------------------------
+    # Automatically rebase PRs when the base branch is updated
+    rebase-strategy: "auto"
+
+  # ------------------------------------------------------------
+  # GitHub Actions Workflow Updates
+  # ------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      # Check for GitHub Actions updates weekly
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    
+    open-pull-requests-limit: 5
+    
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "automated"
+    
+    reviewers:
+      - "hr-app-maintainers"
+    
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"
+    
+    # Group all GitHub Actions updates together
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+# ============================================================
+# Configuration Notes
+# ============================================================
+# 
+# Update Frequency:
+# - Weekly checks balance staying current with reducing PR noise
+# - Monday morning timing allows review during the work week
+#
+# Grouping Strategy:
+# - Minor and patch updates are grouped to reduce PR volume
+# - Major updates create separate PRs for careful review
+# - Related packages (TypeScript, React, etc.) are grouped together
+#
+# Security:
+# - Security updates are always allowed, even for ignored dependencies
+# - npm audit runs automatically in CI pipeline
+#
+# Review Process:
+# - All PRs are assigned to hr-app-maintainers team
+# - Labels enable automated workflows and filtering
+# - Milestone tracking helps with release planning
+#
+# Maintenance:
+# - Review and update ignore list as needed
+# - Adjust grouping patterns based on project needs
+# - Monitor PR volume and adjust schedule if needed
+#
+# ============================================================
