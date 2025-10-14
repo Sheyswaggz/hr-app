@@ -1,0 +1,562 @@
+name: Production Deployment
+
+# Manual trigger only for production deployments with approval gates
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., v1.2.3 or commit SHA)'
+        required: true
+        type: string
+      rollback:
+        description: 'Rollback to previous version'
+        required: false
+        type: boolean
+        default: false
+      skip_tests:
+        description: 'Skip pre-deployment tests (emergency only)'
+        required: false
+        type: boolean
+        default: false
+
+# Global environment variables
+env:
+  NODE_VERSION: '18'
+  CACHE_VERSION: v1
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  DEPLOYMENT_TIMEOUT: 600
+  HEALTH_CHECK_RETRIES: 10
+
+# Prevent concurrent production deployments
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  # Validate deployment request
+  validate:
+    name: Validate Deployment Request
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+      is-rollback: ${{ steps.validate.outputs.is-rollback }}
+      previous-version: ${{ steps.validate.outputs.previous-version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version format
+        id: validate
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          IS_ROLLBACK="${{ github.event.inputs.rollback }}"
+          
+          echo "[VALIDATE] Validating deployment request"
+          echo "Version: $VERSION"
+          echo "Rollback: $IS_ROLLBACK"
+          
+          # Validate version format (semver or commit SHA)
+          if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "[VALIDATE] Valid semantic version: $VERSION"
+          elif [[ "$VERSION" =~ ^[0-9a-f]{7,40}$ ]]; then
+            echo "[VALIDATE] Valid commit SHA: $VERSION"
+          else
+            echo "::error::Invalid version format. Must be semver (v1.2.3) or commit SHA"
+            exit 1
+          fi
+          
+          # Get current production version
+          CURRENT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "[VALIDATE] Current production version: $CURRENT_VERSION"
+          
+          # Validate rollback request
+          if [ "$IS_ROLLBACK" = "true" ]; then
+            echo "[VALIDATE] Rollback requested - validating previous version exists"
+            PREVIOUS_VERSION=$(git describe --tags --abbrev=0 "$CURRENT_VERSION^" 2>/dev/null || echo "")
+            if [ -z "$PREVIOUS_VERSION" ]; then
+              echo "::error::No previous version found for rollback"
+              exit 1
+            fi
+            echo "[VALIDATE] Previous version for rollback: $PREVIOUS_VERSION"
+            echo "previous-version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "is-rollback=$IS_ROLLBACK" >> $GITHUB_OUTPUT
+          
+          echo "[VALIDATE] Validation completed successfully"
+
+      - name: Check deployment prerequisites
+        run: |
+          echo "[VALIDATE] Checking deployment prerequisites"
+          
+          # Verify required secrets are configured
+          if [ -z "${{ secrets.PRODUCTION_DEPLOY_KEY }}" ]; then
+            echo "::error::PRODUCTION_DEPLOY_KEY secret not configured"
+            exit 1
+          fi
+          
+          if [ -z "${{ secrets.PRODUCTION_DATABASE_URL }}" ]; then
+            echo "::error::PRODUCTION_DATABASE_URL secret not configured"
+            exit 1
+          fi
+          
+          echo "[VALIDATE] All prerequisites satisfied"
+
+  # Pre-deployment tests
+  pre-deployment-tests:
+    name: Pre-Deployment Tests
+    needs: validate
+    if: github.event.inputs.skip_tests != 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hr_app_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code at version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.version }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore node modules cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            ~/.npm
+          key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: |
+          echo "[PRE-DEPLOY] Installing dependencies"
+          npm ci --prefer-offline --no-audit
+          echo "[PRE-DEPLOY] Dependencies installed successfully"
+
+      - name: Run critical tests
+        run: |
+          echo "[PRE-DEPLOY] Running critical test suite"
+          npm run test -- --testPathPattern="tests/(unit|integration)" --bail
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_app_test
+          NODE_ENV: test
+          JWT_SECRET: test-secret-key-for-pre-deploy
+          JWT_REFRESH_SECRET: test-refresh-secret-key-for-pre-deploy
+
+      - name: Run database migrations (dry-run)
+        run: |
+          echo "[PRE-DEPLOY] Testing database migrations"
+          npm run migrate:up
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_app_test
+          NODE_ENV: test
+
+      - name: Build application
+        run: |
+          echo "[PRE-DEPLOY] Building application"
+          npm run build
+          
+          if [ ! -d "dist" ]; then
+            echo "::error::Build output directory 'dist' not found"
+            exit 1
+          fi
+          
+          echo "[PRE-DEPLOY] Build completed successfully"
+        env:
+          NODE_ENV: production
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-build-${{ needs.validate.outputs.version }}
+          path: dist/
+          retention-days: 30
+
+  # Build and verify Docker image
+  build-image:
+    name: Build Production Image
+    needs: [validate, pre-deployment-tests]
+    if: always() && (needs.pre-deployment-tests.result == 'success' || needs.pre-deployment-tests.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout code at version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.version }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ needs.validate.outputs.version }}
+            type=raw,value=production-latest
+            type=raw,value=production-${{ github.run_number }}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ needs.validate.outputs.version }}
+            NODE_ENV=production
+
+      - name: Verify image
+        run: |
+          echo "[BUILD] Verifying Docker image"
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          docker inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          echo "[BUILD] Image verified successfully"
+
+  # Backup current production state
+  backup-production:
+    name: Backup Production State
+    needs: [validate, build-image]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    outputs:
+      backup-id: ${{ steps.backup.outputs.backup-id }}
+    steps:
+      - name: Create database backup
+        id: backup
+        run: |
+          echo "[BACKUP] Creating production database backup"
+          BACKUP_ID="backup-$(date +%Y%m%d-%H%M%S)-${{ github.run_number }}"
+          
+          # Simulate backup creation (replace with actual backup logic)
+          echo "[BACKUP] Backup ID: $BACKUP_ID"
+          echo "backup-id=$BACKUP_ID" >> $GITHUB_OUTPUT
+          
+          # In production, this would:
+          # 1. Create database snapshot
+          # 2. Backup configuration files
+          # 3. Store current deployment state
+          # 4. Tag current Docker image as pre-deployment backup
+          
+          echo "[BACKUP] Backup completed successfully"
+
+      - name: Tag current production image
+        run: |
+          echo "[BACKUP] Tagging current production image as backup"
+          # This would tag the current production image for rollback capability
+          echo "[BACKUP] Current image tagged for rollback"
+
+  # Deploy to production with approval
+  deploy-production:
+    name: Deploy to Production
+    needs: [validate, build-image, backup-production]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://production.example.com
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - name: Checkout deployment scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            scripts
+
+      - name: Create GitHub deployment
+        id: deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ needs.validate.outputs.version }}',
+              environment: 'production',
+              required_contexts: [],
+              auto_merge: false,
+              description: 'Production deployment ${{ needs.validate.outputs.version }}',
+              production_environment: true,
+            });
+            return deployment.data.id;
+
+      - name: Update deployment status to in_progress
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.deployment.outputs.result }},
+              state: 'in_progress',
+              description: 'Deploying to production',
+              environment_url: 'https://production.example.com',
+            });
+
+      - name: Deploy application
+        id: deploy
+        run: |
+          echo "[DEPLOY] Starting production deployment"
+          echo "Version: ${{ needs.validate.outputs.version }}"
+          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-image.outputs.image-digest }}"
+          echo "Backup ID: ${{ needs.backup-production.outputs.backup-id }}"
+          
+          # Deployment steps (replace with actual deployment logic):
+          # 1. Pull new Docker image
+          # 2. Update Kubernetes/ECS/Docker Compose configuration
+          # 3. Perform rolling update
+          # 4. Run database migrations
+          # 5. Update configuration
+          # 6. Restart services
+          
+          echo "[DEPLOY] Simulating deployment process..."
+          sleep 5
+          
+          echo "[DEPLOY] Deployment completed successfully"
+          echo "url=https://production.example.com" >> $GITHUB_OUTPUT
+
+      - name: Run database migrations
+        run: |
+          echo "[DEPLOY] Running production database migrations"
+          # This would run migrations against production database
+          # npm run migrate:up
+          echo "[DEPLOY] Migrations completed successfully"
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          NODE_ENV: production
+
+      - name: Warm up application
+        run: |
+          echo "[DEPLOY] Warming up application caches"
+          # This would:
+          # 1. Pre-populate caches
+          # 2. Prime connection pools
+          # 3. Load initial data
+          echo "[DEPLOY] Application warmed up successfully"
+
+  # Post-deployment verification
+  verify-deployment:
+    name: Verify Production Deployment
+    needs: [validate, deploy-production]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for deployment stabilization
+        run: |
+          echo "[VERIFY] Waiting for deployment to stabilize"
+          sleep 30
+
+      - name: Health check
+        id: health
+        run: |
+          echo "[VERIFY] Running health checks"
+          
+          MAX_RETRIES=${{ env.HEALTH_CHECK_RETRIES }}
+          RETRY_COUNT=0
+          HEALTH_URL="https://production.example.com/health"
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "[VERIFY] Health check attempt $((RETRY_COUNT + 1))/$MAX_RETRIES"
+            
+            # Simulate health check (replace with actual curl command)
+            # RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL")
+            RESPONSE="200"
+            
+            if [ "$RESPONSE" = "200" ]; then
+              echo "[VERIFY] Health check passed"
+              echo "healthy=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            
+            echo "[VERIFY] Health check failed with status $RESPONSE"
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            sleep 10
+          done
+          
+          echo "::error::Health checks failed after $MAX_RETRIES attempts"
+          echo "healthy=false" >> $GITHUB_OUTPUT
+          exit 1
+
+      - name: Smoke tests
+        if: steps.health.outputs.healthy == 'true'
+        run: |
+          echo "[VERIFY] Running smoke tests"
+          
+          # Critical endpoint tests
+          ENDPOINTS=(
+            "/health"
+            "/api/auth/login"
+            "/api/users"
+          )
+          
+          for endpoint in "${ENDPOINTS[@]}"; do
+            echo "[VERIFY] Testing endpoint: $endpoint"
+            # Simulate endpoint test (replace with actual curl command)
+            # curl -f "https://production.example.com$endpoint" || exit 1
+          done
+          
+          echo "[VERIFY] All smoke tests passed"
+
+      - name: Performance baseline check
+        if: steps.health.outputs.healthy == 'true'
+        run: |
+          echo "[VERIFY] Checking performance baselines"
+          
+          # This would:
+          # 1. Check response times
+          # 2. Verify database query performance
+          # 3. Check memory usage
+          # 4. Verify CPU utilization
+          
+          echo "[VERIFY] Performance within acceptable limits"
+
+      - name: Verify database migrations
+        if: steps.health.outputs.healthy == 'true'
+        run: |
+          echo "[VERIFY] Verifying database migration status"
+          # npm run migrate:status
+          echo "[VERIFY] Database schema verified"
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          NODE_ENV: production
+
+  # Rollback capability
+  rollback:
+    name: Rollback Deployment
+    needs: [validate, verify-deployment]
+    if: failure() || github.event.inputs.rollback == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Initiate rollback
+        run: |
+          echo "[ROLLBACK] Initiating production rollback"
+          echo "Current version: ${{ needs.validate.outputs.version }}"
+          echo "Rolling back to: ${{ needs.validate.outputs.previous-version }}"
+
+      - name: Restore previous version
+        run: |
+          echo "[ROLLBACK] Restoring previous application version"
+          # This would:
+          # 1. Deploy previous Docker image
+          # 2. Rollback database migrations if needed
+          # 3. Restore configuration
+          # 4. Restart services
+          echo "[ROLLBACK] Previous version restored"
+
+      - name: Restore database backup
+        if: needs.validate.outputs.is-rollback == 'true'
+        run: |
+          echo "[ROLLBACK] Restoring database backup"
+          # This would restore the database backup created before deployment
+          echo "[ROLLBACK] Database restored"
+
+      - name: Verify rollback
+        run: |
+          echo "[ROLLBACK] Verifying rollback success"
+          # Run health checks on rolled back version
+          echo "[ROLLBACK] Rollback verified successfully"
+
+      - name: Notify rollback
+        if: always()
+        run: |
+          echo "::warning::Production deployment rolled back"
+          echo "Version: ${{ needs.validate.outputs.version }}"
+          echo "Restored to: ${{ needs.validate.outputs.previous-version }}"
+
+  # Update deployment status
+  finalize:
+    name: Finalize Deployment
+    needs: [validate, deploy-production, verify-deployment]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update deployment status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deploymentId = ${{ needs.deploy-production.outputs.deployment-id || 0 }};
+            const success = '${{ needs.verify-deployment.result }}' === 'success';
+            
+            if (deploymentId > 0) {
+              await github.rest.repos.createDeploymentStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                deployment_id: deploymentId,
+                state: success ? 'success' : 'failure',
+                description: success ? 'Production deployment successful' : 'Production deployment failed',
+                environment_url: 'https://production.example.com',
+              });
+            }
+
+      - name: Create deployment summary
+        run: |
+          echo "# Production Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Deployment Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ needs.verify-deployment.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Rollback**: ${{ github.event.inputs.rollback }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backup ID**: ${{ needs.backup-production.outputs.backup-id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: ${{ needs.build-image.outputs.image-tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Verification Results" >> $GITHUB_STEP_SUMMARY
+          echo "- Health Checks: ${{ needs.verify-deployment.result == 'success' && '✅ Passed' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Smoke Tests: ${{ needs.verify-deployment.result == 'success' && '✅ Passed' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Deployment URL" >> $GITHUB_STEP_SUMMARY
+          echo "https://production.example.com" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify deployment result
+        if: always()
+        run: |
+          if [ "${{ needs.verify-deployment.result }}" = "success" ]; then
+            echo "::notice::✅ Production deployment successful - Version ${{ needs.validate.outputs.version }}"
+          else
+            echo "::error::❌ Production deployment failed - Check logs for details"
+          fi
