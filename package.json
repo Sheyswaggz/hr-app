@@ -18,12 +18,11 @@
     "test:auth": "vitest run --testPathPattern=auth",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"src/**/*.{ts,js,json,md}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,js,json,md}\"",
+    "format": "prettier --write \"src/**/*.{ts,js,json}\" \"tests/**/*.{ts,js,json}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,js,json}\" \"tests/**/*.{ts,js,json}\"",
     "type-check": "tsc --noEmit",
     "validate": "npm run type-check && npm run lint && npm run format:check && npm run test",
-    "clean": "rm -rf dist node_modules/.cache",
-    "prepare": "node -e \"try { require('husky').install() } catch (e) {}\"",
+    "clean": "rm -rf dist",
     "db:setup": "node-pg-migrate up",
     "migrate:up": "node-pg-migrate up",
     "migrate:down": "node-pg-migrate down",
@@ -59,30 +58,18 @@
     "eslint-plugin-import": "^2.29.0",
     "eslint-plugin-security": "^1.7.1",
     "globals": "^13.24.0",
-    "husky": "^8.0.3",
     "jsdom": "^23.0.1",
-    "lint-staged": "^15.2.0",
     "prettier": "^3.1.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
-    "typescript-eslint": "^6.13.0",
     "vitest": "^1.0.4"
-  },
-  "lint-staged": {
-    "*.{ts,js}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{json,md}": [
-      "prettier --write"
-    ]
   },
   "keywords": [
     "hr",
     "human-resources",
     "employee-management",
     "typescript",
-    "nodejs"
+    "node"
   ],
   "author": "",
   "license": "UNLICENSED"
