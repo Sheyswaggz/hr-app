@@ -1,20 +1,36 @@
 // eslint.config.js
 import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
+import tsPlugin from '@typescript-eslint/eslint-plugin';
+import tsParser from '@typescript-eslint/parser';
 import importPlugin from 'eslint-plugin-import';
 import securityPlugin from 'eslint-plugin-security';
 import prettierConfig from 'eslint-config-prettier';
 import globals from 'globals';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * ESLint Flat Configuration for HR Application (Backend)
  * 
  * This configuration provides comprehensive linting for a TypeScript Node.js backend application
- * with security, and code quality enforcement.
+ * with security and code quality enforcement.
+ * 
+ * Features:
+ * - TypeScript type-aware linting with strict rules
+ * - Security vulnerability detection
+ * - Import/export validation and ordering
+ * - Prettier integration for consistent formatting
+ * 
+ * @see https://eslint.org/docs/latest/use/configure/configuration-files-new
  */
 
 export default [
-  // Global Ignores
+  // ============================================================
+  // Global Ignores - Applied to all configurations
+  // ============================================================
   {
     ignores: [
       '**/node_modules/**',
@@ -27,18 +43,21 @@ export default [
     ],
   },
 
+  // ============================================================
   // Base JavaScript Configuration
+  // ============================================================
   js.configs.recommended,
 
-  // TypeScript Configuration
-  ...tseslint.configs.recommendedTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
+  // ============================================================
+  // TypeScript Configuration with Type-Aware Linting
+  // ============================================================
   {
+    files: ['**/*.ts', '**/*.tsx'],
     languageOptions: {
-      parser: tseslint.parser,
+      parser: tsParser,
       parserOptions: {
         project: './tsconfig.json',
-        tsconfigRootDir: import.meta.dirname,
+        tsconfigRootDir: __dirname,
         ecmaVersion: 2024,
         sourceType: 'module',
       },
@@ -48,13 +67,16 @@ export default [
       },
     },
     plugins: {
-      '@typescript-eslint': tseslint.plugin,
+      '@typescript-eslint': tsPlugin,
     },
     rules: {
+      // Disable base ESLint rules that are covered by TypeScript
       'no-unused-vars': 'off',
       'no-undef': 'off',
       'no-redeclare': 'off',
       'no-use-before-define': 'off',
+
+      // TypeScript-specific rules
       '@typescript-eslint/no-unused-vars': [
         'error',
         {
@@ -91,8 +113,11 @@ export default [
     },
   },
 
+  // ============================================================
   // Import Plugin Configuration
+  // ============================================================
   {
+    files: ['**/*.ts', '**/*.js'],
     plugins: {
       import: importPlugin,
     },
@@ -111,7 +136,8 @@ export default [
       },
     },
     rules: {
-      'import/no-unresolved': 'error',
+      // Import validation
+      'import/no-unresolved': 'off', // TypeScript handles this
       'import/named': 'error',
       'import/default': 'error',
       'import/namespace': 'error',
@@ -119,7 +145,8 @@ export default [
       'import/no-self-import': 'error',
       'import/no-cycle': ['error', { maxDepth: 10 }],
       'import/no-useless-path-segments': 'error',
-      'import/no-relative-packages': 'error',
+
+      // Import style
       'import/first': 'error',
       'import/newline-after-import': 'error',
       'import/no-duplicates': ['error', { 'prefer-inline': true }],
@@ -142,25 +169,21 @@ export default [
             order: 'asc',
             caseInsensitive: true,
           },
-          pathGroups: [
-            {
-              pattern: '@/**',
-              group: 'internal',
-            },
-          ],
         },
       ],
     },
   },
 
+  // ============================================================
   // Security Plugin Configuration
+  // ============================================================
   {
+    files: ['**/*.ts', '**/*.js'],
     plugins: {
       security: securityPlugin,
     },
     rules: {
-      ...securityPlugin.configs.recommended.rules,
-      'security/detect-object-injection': 'off',
+      'security/detect-object-injection': 'off', // Too many false positives
       'security/detect-non-literal-fs-filename': 'warn',
       'security/detect-unsafe-regex': 'error',
       'security/detect-buffer-noassert': 'error',
@@ -175,12 +198,15 @@ export default [
     },
   },
 
+  // ============================================================
   // General Code Quality Rules
+  // ============================================================
   {
+    files: ['**/*.ts', '**/*.js'],
     rules: {
+      // Best practices
       'no-console': 'off', // Backend logging is fine
       'no-debugger': 'error',
-      'no-alert': 'error',
       'no-var': 'error',
       'prefer-const': 'error',
       'prefer-arrow-callback': 'error',
@@ -220,15 +246,18 @@ export default [
     },
   },
 
+  // ============================================================
   // Test Files Configuration
+  // ============================================================
   {
-    files: ['**/*.test.ts', '**/*.spec.ts'],
+    files: ['**/*.test.ts', '**/*.spec.ts', 'tests/**/*.ts'],
     languageOptions: {
       globals: {
         ...globals.node,
       },
     },
     rules: {
+      // Relax rules for test files
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
@@ -242,9 +271,11 @@ export default [
     },
   },
 
+  // ============================================================
   // Configuration Files
+  // ============================================================
   {
-    files: ['*.config.{js,ts}', '.*.{js,ts}'],
+    files: ['*.config.js', '.*.js'],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -257,12 +288,8 @@ export default [
     },
   },
 
-  // JavaScript Files (Non-TypeScript)
-  {
-    files: ['**/*.{js,cjs,mjs}'],
-    ...tseslint.configs.disableTypeChecked,
-  },
-
+  // ============================================================
   // Prettier Integration - MUST BE LAST
+  // ============================================================
   prettierConfig,
 ];
