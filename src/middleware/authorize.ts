@@ -16,7 +16,7 @@ import { type Request, type Response, type NextFunction } from 'express';
 import { randomUUID } from 'crypto';
 
 import { type JWTPayload } from '../types/auth.js';
-import { type UserRole } from '../types/index.js';
+import { UserRole } from '../types/index.js';
 
 /**
  * Authorization Error
