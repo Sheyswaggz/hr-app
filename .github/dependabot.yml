@@ -1,0 +1,218 @@
+# ============================================================
+# Dependabot Configuration for Automated Dependency Updates
+# ============================================================
+# This configuration enables Dependabot to automatically check
+# for dependency updates and create pull requests for the HR
+# application. It follows security best practices and ensures
+# dependencies stay current with minimal manual intervention.
+#
+# Documentation: https://docs.github.com/en/code-security/dependabot
+# ============================================================
+
+version: 2
+
+# ============================================================
+# Update Registries Configuration
+# ============================================================
+# Define custom registries if needed (currently using defaults)
+registries: {}
+
+# ============================================================
+# Update Configurations
+# ============================================================
+updates:
+  # ----------------------------------------------------------
+  # NPM Dependencies (package.json)
+  # ----------------------------------------------------------
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      # Check for updates weekly on Mondays at 9:00 AM UTC
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    
+    # Open pull requests for updates
+    open-pull-requests-limit: 10
+    
+    # Grouping strategy for updates
+    groups:
+      # Group all minor and patch updates together
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      
+      # Separate group for development dependencies
+      development-dependencies:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+    
+    # Pull request configuration
+    pull-request-branch-name:
+      separator: "/"
+    
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: "scope"
+    
+    # Reviewers and assignees
+    reviewers:
+      - "hr-app-maintainers"
+    
+    assignees:
+      - "hr-app-maintainers"
+    
+    # Labels for categorization
+    labels:
+      - "dependencies"
+      - "automated"
+      - "npm"
+    
+    # Milestone assignment (optional)
+    # milestone: 1
+    
+    # Version requirements
+    versioning-strategy: "auto"
+    
+    # Ignore specific dependencies or versions
+    ignore:
+      # Ignore major version updates for stable dependencies
+      # These require manual review due to potential breaking changes
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "pg"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "express"
+        update-types: ["version-update:semver-major"]
+    
+    # Allow Dependabot to update lockfiles
+    allow:
+      - dependency-type: "all"
+    
+    # Rebase strategy for pull requests
+    rebase-strategy: "auto"
+
+  # ----------------------------------------------------------
+  # GitHub Actions Dependencies
+  # ----------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      # Check for updates weekly on Mondays at 10:00 AM UTC
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+      timezone: "UTC"
+    
+    # Open pull requests for updates
+    open-pull-requests-limit: 5
+    
+    # Pull request configuration
+    pull-request-branch-name:
+      separator: "/"
+    
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    
+    # Reviewers and assignees
+    reviewers:
+      - "hr-app-maintainers"
+    
+    assignees:
+      - "hr-app-maintainers"
+    
+    # Labels for categorization
+    labels:
+      - "dependencies"
+      - "automated"
+      - "github-actions"
+      - "ci-cd"
+    
+    # Allow all GitHub Actions updates
+    allow:
+      - dependency-type: "all"
+    
+    # Rebase strategy for pull requests
+    rebase-strategy: "auto"
+
+# ============================================================
+# Configuration Notes
+# ============================================================
+# 
+# Update Strategy:
+# ----------------
+# - Minor and patch updates are grouped together to reduce PR noise
+# - Development dependencies are grouped separately for easier review
+# - Major version updates are ignored for critical dependencies and
+#   require manual review to assess breaking changes
+# 
+# Security Updates:
+# -----------------
+# - Dependabot automatically creates PRs for security vulnerabilities
+# - Security updates bypass the grouping rules and are created immediately
+# - Review security updates promptly and merge after CI passes
+# 
+# Pull Request Management:
+# ------------------------
+# - Maximum 10 PRs for npm dependencies (prevents overwhelming the team)
+# - Maximum 5 PRs for GitHub Actions (lower frequency of updates)
+# - PRs are automatically rebased when base branch changes
+# - Commit messages follow conventional commits format
+# 
+# Review Process:
+# ---------------
+# 1. Dependabot creates PR with changelog and compatibility info
+# 2. CI pipeline runs automatically (tests, linting, build)
+# 3. Reviewers are automatically assigned
+# 4. Review changes and test locally if needed
+# 5. Merge if CI passes and no issues found
+# 6. Monitor production after deployment
+# 
+# Ignored Updates:
+# ----------------
+# Major version updates for core dependencies are ignored because:
+# - React: Breaking changes require code updates
+# - TypeScript: May require type fixes across codebase
+# - Vite/Vitest: Build configuration changes needed
+# - ESLint: Rule changes may require code fixes
+# - PostgreSQL driver: Database compatibility concerns
+# - Express: API changes may affect middleware
+# 
+# These should be updated manually during planned maintenance windows
+# with thorough testing and code review.
+# 
+# Customization:
+# --------------
+# To customize this configuration:
+# 1. Adjust schedule timing for your team's timezone
+# 2. Modify grouping rules based on your update preferences
+# 3. Add/remove ignored dependencies based on your stability needs
+# 4. Update reviewers/assignees to match your team structure
+# 5. Adjust PR limits based on your review capacity
+# 
+# Monitoring:
+# -----------
+# - Check Dependabot dashboard: Repository → Insights → Dependency graph
+# - Review security alerts: Repository → Security → Dependabot alerts
+# - Monitor PR activity: Repository → Pull requests (filter by label)
+# - Check update logs: Repository → Insights → Dependency graph → Dependabot
+# 
+# ============================================================
