@@ -14,7 +14,7 @@ import {
   comparePassword,
   validatePasswordStrength,
   getPasswordConfig,
-} from '../../src/utils/password';
+} from '../../../src/utils/password.js';
 
 // Mock bcrypt module
 vi.mock('bcrypt');
