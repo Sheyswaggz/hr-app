@@ -29,7 +29,11 @@
     "migrate:down": "node-pg-migrate down",
     "migrate:create": "node-pg-migrate create",
     "migrate:status": "node-pg-migrate status",
-    "test:db": "vitest run --config vitest.config.db.ts"
+    "test:db": "vitest run --config vitest.config.db.ts",
+    "ci:install": "npm ci",
+    "ci:test": "vitest run --coverage --reporter=default --reporter=junit --outputFile=test-results/junit.xml",
+    "ci:build": "NODE_ENV=production tsc && vite build --mode production",
+    "ci:lint": "eslint . --max-warnings 0 --format=json --output-file=eslint-report.json"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
