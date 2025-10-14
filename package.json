@@ -9,20 +9,20 @@
     "npm": ">=9.0.0"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:auth": "vitest run --testPathPattern=auth",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format": "prettier --write \"src/**/*.{ts,js,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,js,json,md}\"",
     "type-check": "tsc --noEmit",
     "validate": "npm run type-check && npm run lint && npm run format:check && npm run test",
-    "clean": "rm -rf dist node_modules/.vite",
+    "clean": "rm -rf dist node_modules/.cache",
     "prepare": "node -e \"try { require('husky').install() } catch (e) {}\"",
     "db:setup": "node-pg-migrate up",
     "migrate:up": "node-pg-migrate up",
@@ -30,9 +30,9 @@
     "migrate:create": "node-pg-migrate create",
     "migrate:status": "node-pg-migrate status",
     "test:db": "vitest run --config vitest.config.db.ts",
-    "ci:install": "npm ci",
+    "ci:install": "npm install",
     "ci:test": "vitest run --coverage --reporter=default --reporter=junit --outputFile=test-results/junit.xml",
-    "ci:build": "NODE_ENV=production tsc && vite build --mode production",
+    "ci:build": "NODE_ENV=production tsc",
     "ci:lint": "eslint . --max-warnings 0 --format=json --output-file=eslint-report.json"
   },
   "dependencies": {
@@ -42,9 +42,6 @@
     "jsonwebtoken": "^9.0.2",
     "node-pg-migrate": "^6.2.2",
     "pg": "^8.11.3",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^6.20.0",
     "validator": "^13.11.0"
   },
   "devDependencies": {
@@ -52,35 +49,31 @@
     "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.10.0",
     "@types/pg": "^8.10.9",
-    "@types/react": "^18.2.42",
-    "@types/react-dom": "^18.2.17",
     "@types/validator": "^13.11.7",
     "@typescript-eslint/eslint-plugin": "^6.13.0",
     "@typescript-eslint/parser": "^6.13.0",
-    "@vitejs/plugin-react": "^4.2.1",
     "@vitest/coverage-v8": "^1.0.4",
     "@vitest/ui": "^1.0.4",
     "eslint": "^8.55.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-import": "^2.29.0",
-    "eslint-plugin-jsx-a11y": "^6.8.0",
-    "eslint-plugin-react": "^7.33.2",
-    "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-security": "^1.7.1",
+    "globals": "^13.24.0",
     "husky": "^8.0.3",
     "jsdom": "^23.0.1",
     "lint-staged": "^15.2.0",
     "prettier": "^3.1.0",
+    "tsx": "^4.7.0",
     "typescript": "^5.3.3",
-    "vite": "^5.0.7",
+    "typescript-eslint": "^6.13.0",
     "vitest": "^1.0.4"
   },
   "lint-staged": {
-    "*.{ts,tsx,js,jsx}": [
+    "*.{ts,js}": [
       "eslint --fix",
       "prettier --write"
     ],
-    "*.{json,css,md}": [
+    "*.{json,md}": [
       "prettier --write"
     ]
   },
@@ -88,8 +81,8 @@
     "hr",
     "human-resources",
     "employee-management",
-    "react",
-    "typescript"
+    "typescript",
+    "nodejs"
   ],
   "author": "",
   "license": "UNLICENSED"
