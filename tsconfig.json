@@ -3,7 +3,7 @@
     "target": "ES2022",
     "lib": ["ES2022"],
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "Node",
     "resolveJsonModule": true,
     "allowJs": false,
     "checkJs": false,
@@ -45,20 +45,23 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@services/*": ["./src/services/*"],
-      "@utils/*": ["./src/utils/*"],
-      "@types/*": ["./src/types/*"],
       "@config/*": ["./src/config/*"],
-      "@middleware/*": ["./src/middleware/*"],
       "@controllers/*": ["./src/controllers/*"],
-      "@routes/*": ["./src/routes/*"]
+      "@middleware/*": ["./src/middleware/*"],
+      "@routes/*": ["./src/routes/*"],
+      "@services/*": ["./src/services/*"],
+      "@types/*": ["./src/types/*"],
+      "@utils/*": ["./src/utils/*"],
+      "@db/*": ["./src/db/*"]
     },
-    "types": ["node", "jest"]
+    "types": ["node", "vitest/globals"]
   },
   "include": [
     "src/**/*",
-    "tests/**/*",
-    "migrations/**/*"
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "tests/**/*.ts",
+    "migrations/**/*.js"
   ],
   "exclude": [
     "node_modules",
