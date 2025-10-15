@@ -1,11 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx",
-    "allowImportingTsExtensions": true,
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "resolveJsonModule": true,
     "allowJs": false,
     "checkJs": false,
@@ -15,14 +13,11 @@
     "declarationMap": true,
     "sourceMap": true,
     "removeComments": false,
-    "noEmit": false,
     "importHelpers": true,
     "downlevelIteration": true,
-    "isolatedModules": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "verbatimModuleSyntax": false,
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -48,32 +43,29 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@components/*": ["./src/components/*"],
-      "@features/*": ["./src/features/*"],
-      "@services/*": ["./src/services/*"],
-      "@utils/*": ["./src/utils/*"],
-      "@hooks/*": ["./src/hooks/*"],
-      "@types/*": ["./src/types/*"],
       "@config/*": ["./src/config/*"],
-      "@assets/*": ["./src/assets/*"]
-    }
+      "@controllers/*": ["./src/controllers/*"],
+      "@middleware/*": ["./src/middleware/*"],
+      "@routes/*": ["./src/routes/*"],
+      "@services/*": ["./src/services/*"],
+      "@types/*": ["./src/types/*"],
+      "@utils/*": ["./src/utils/*"],
+      "@db/*": ["./src/db/*"]
+    },
+    "types": ["node"]
   },
   "include": [
     "src/**/*",
     "src/**/*.ts",
-    "src/**/*.tsx",
     "src/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "build",
-    "**/*.test.ts",
-    "**/*.test.tsx",
-    "**/*.spec.ts",
-    "**/*.spec.tsx",
     "coverage",
-    ".vite"
+    "**/*.test.ts",
+    "**/*.spec.ts"
   ],
   "ts-node": {
     "compilerOptions": {
