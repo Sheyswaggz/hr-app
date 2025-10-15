@@ -1,11 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ES2022"],
     "module": "ESNext",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx",
-    "allowImportingTsExtensions": true,
+    "moduleResolution": "node",
     "resolveJsonModule": true,
     "allowJs": false,
     "checkJs": false,
@@ -22,7 +20,6 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "verbatimModuleSyntax": false,
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -48,30 +45,25 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@components/*": ["./src/components/*"],
-      "@features/*": ["./src/features/*"],
       "@services/*": ["./src/services/*"],
       "@utils/*": ["./src/utils/*"],
-      "@hooks/*": ["./src/hooks/*"],
       "@types/*": ["./src/types/*"],
       "@config/*": ["./src/config/*"],
-      "@assets/*": ["./src/assets/*"]
-    }
+      "@middleware/*": ["./src/middleware/*"],
+      "@controllers/*": ["./src/controllers/*"],
+      "@routes/*": ["./src/routes/*"]
+    },
+    "types": ["node", "jest"]
   },
   "include": [
     "src/**/*",
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "src/**/*.d.ts"
+    "tests/**/*",
+    "migrations/**/*"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "build",
-    "**/*.test.ts",
-    "**/*.test.tsx",
-    "**/*.spec.ts",
-    "**/*.spec.tsx",
     "coverage",
     ".vite"
   ],
