@@ -46,11 +46,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Check for changes
         uses: dorny/paths-filter@v2
         id: filter
         with:
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
           filters: |
             code:
               - 'src/**'
@@ -691,7 +694,7 @@ jobs:
           echo "- **Actor**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Run Number**: ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
 
-      - name: Report pipeline status
+      - name: Check pipeline status
         run: |
           # Count failures
           FAILURES=0
@@ -737,7 +740,8 @@ jobs:
           fi
           
           if [ $FAILURES -gt 0 ]; then
-            echo "::notice::Pipeline completed with $FAILURES failed job(s). Check individual job logs for details."
+            echo "::warning::Pipeline completed with $FAILURES failed job(s)"
+            echo "::notice::Check individual job logs for details"
           else
             echo "::notice::✅ Pipeline completed successfully"
           fi
