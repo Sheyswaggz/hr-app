@@ -1,7 +1,6 @@
 // eslint.config.js
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
-import importPlugin from 'eslint-plugin-import';
 import securityPlugin from 'eslint-plugin-security';
 import prettierConfig from 'eslint-config-prettier';
 import globals from 'globals';
@@ -9,16 +8,22 @@ import globals from 'globals';
 /**
  * ESLint Flat Configuration for HR Application Backend
  * 
- * Node.js/Express backend with TypeScript
+ * This configuration provides comprehensive linting for a TypeScript + Node.js/Express application
+ * with security and code quality enforcement.
+ * 
  * Features:
- * - TypeScript type-aware linting
+ * - TypeScript type-aware linting with strict rules
+ * - Node.js and Express best practices
  * - Security vulnerability detection
- * - Import/export validation
- * - Node.js best practices
+ * - Prettier integration for consistent formatting
+ * 
+ * @see https://eslint.org/docs/latest/use/configure/configuration-files-new
  */
 
 export default [
-  // Global Ignores
+  // ============================================================
+  // Global Ignores - Applied to all configurations
+  // ============================================================
   {
     ignores: [
       '**/node_modules/**',
@@ -31,11 +36,16 @@ export default [
     ],
   },
 
+  // ============================================================
   // Base JavaScript Configuration
+  // ============================================================
   js.configs.recommended,
 
-  // TypeScript Configuration
+  // ============================================================
+  // TypeScript Configuration with Type-Aware Linting
+  // ============================================================
   ...tseslint.configs.recommendedTypeChecked,
+  ...tseslint.configs.stylisticTypeChecked,
   {
     languageOptions: {
       parser: tseslint.parser,
@@ -54,14 +64,20 @@ export default [
       '@typescript-eslint': tseslint.plugin,
     },
     rules: {
+      // Disable base ESLint rules that are covered by TypeScript
       'no-unused-vars': 'off',
       'no-undef': 'off',
+      'no-redeclare': 'off',
+      'no-use-before-define': 'off',
+
+      // TypeScript-specific rules
       '@typescript-eslint/no-unused-vars': [
         'error',
         {
           argsIgnorePattern: '^_',
           varsIgnorePattern: '^_',
           caughtErrorsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
         },
       ],
       '@typescript-eslint/no-explicit-any': 'warn',
@@ -75,98 +91,124 @@ export default [
           fixStyle: 'inline-type-imports',
         },
       ],
+      '@typescript-eslint/consistent-type-definitions': ['error', 'interface'],
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
       '@typescript-eslint/await-thenable': 'error',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+      '@typescript-eslint/prefer-nullish-coalescing': 'error',
+      '@typescript-eslint/prefer-optional-chain': 'error',
+      '@typescript-eslint/strict-boolean-expressions': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'warn',
       '@typescript-eslint/no-unsafe-member-access': 'warn',
       '@typescript-eslint/no-unsafe-call': 'warn',
       '@typescript-eslint/no-unsafe-return': 'warn',
+      '@typescript-eslint/no-unsafe-argument': 'warn',
     },
   },
 
-  // Import Plugin Configuration
-  {
-    plugins: {
-      import: importPlugin,
-    },
-    settings: {
-      'import/resolver': {
-        typescript: {
-          alwaysTryTypes: true,
-          project: './tsconfig.json',
-        },
-        node: {
-          extensions: ['.js', '.ts'],
-        },
-      },
-    },
-    rules: {
-      'import/no-unresolved': 'error',
-      'import/named': 'error',
-      'import/no-cycle': ['error', { maxDepth: 10 }],
-      'import/first': 'error',
-      'import/newline-after-import': 'error',
-      'import/no-duplicates': 'error',
-      'import/order': [
-        'error',
-        {
-          groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index', 'type'],
-          'newlines-between': 'always',
-          alphabetize: { order: 'asc', caseInsensitive: true },
-        },
-      ],
-    },
-  },
-
-  // Security Plugin
+  // ============================================================
+  // Security Plugin Configuration
+  // ============================================================
   {
     plugins: {
       security: securityPlugin,
     },
     rules: {
       ...securityPlugin.configs.recommended.rules,
-      'security/detect-object-injection': 'off',
+      'security/detect-object-injection': 'off', // Too many false positives
       'security/detect-non-literal-fs-filename': 'warn',
+      'security/detect-unsafe-regex': 'error',
+      'security/detect-buffer-noassert': 'error',
+      'security/detect-child-process': 'warn',
+      'security/detect-disable-mustache-escape': 'error',
+      'security/detect-eval-with-expression': 'error',
+      'security/detect-no-csrf-before-method-override': 'error',
+      'security/detect-non-literal-regexp': 'warn',
+      'security/detect-non-literal-require': 'warn',
+      'security/detect-possible-timing-attacks': 'warn',
+      'security/detect-pseudoRandomBytes': 'error',
     },
   },
 
-  // General Rules
+  // ============================================================
+  // General Code Quality Rules
+  // ============================================================
   {
     rules: {
-      'no-console': 'off',
+      // Best practices
+      'no-console': 'off', // Console logging is acceptable in backend
       'no-debugger': 'error',
+      'no-alert': 'error',
       'no-var': 'error',
       'prefer-const': 'error',
       'prefer-arrow-callback': 'error',
       'prefer-template': 'error',
-      'object-shorthand': 'error',
-      'no-param-reassign': ['error', { props: false }],
+      'prefer-destructuring': [
+        'error',
+        {
+          array: false,
+          object: true,
+        },
+      ],
+      'object-shorthand': ['error', 'always'],
+      'no-nested-ternary': 'warn',
+      'no-unneeded-ternary': 'error',
+      'no-else-return': 'error',
+      'no-lonely-if': 'error',
+      'no-useless-return': 'error',
+      'no-useless-concat': 'error',
+      'no-useless-computed-key': 'error',
+      'no-useless-rename': 'error',
+      'no-param-reassign': ['error', { props: true }],
+      'no-implicit-coercion': 'error',
       'eqeqeq': ['error', 'always', { null: 'ignore' }],
       'curly': ['error', 'all'],
+      'dot-notation': 'error',
+      'yoda': 'error',
+      'prefer-rest-params': 'error',
+      'prefer-spread': 'error',
+      'no-throw-literal': 'error',
       'require-await': 'error',
+      'no-return-await': 'error',
+      'no-async-promise-executor': 'error',
+      'no-promise-executor-return': 'error',
+      'max-depth': ['warn', 4],
+      'max-lines-per-function': ['warn', { max: 150, skipBlankLines: true, skipComments: true }],
+      'complexity': ['warn', 15],
     },
   },
 
-  // Test Files
+  // ============================================================
+  // Test Files Configuration
+  // ============================================================
   {
-    files: ['**/*.test.ts', '**/*.spec.ts', 'tests/**/*.ts'],
+    files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', '**/tests/**/*.{ts,tsx}'],
     languageOptions: {
       globals: {
         ...globals.node,
       },
     },
     rules: {
+      // Relax rules for test files
       '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      'no-console': 'off',
+      'max-lines-per-function': 'off',
+      'max-depth': 'off',
+      'complexity': 'off',
     },
   },
 
-  // Config Files
+  // ============================================================
+  // Configuration Files
+  // ============================================================
   {
-    files: ['*.config.{js,ts}'],
+    files: ['*.config.{js,ts}', '.*.{js,ts}'],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -174,15 +216,38 @@ export default [
     },
     rules: {
       'import/no-default-export': 'off',
+      '@typescript-eslint/no-var-requires': 'off',
+      'no-console': 'off',
     },
   },
 
-  // JavaScript Files
+  // ============================================================
+  // Migration Files
+  // ============================================================
   {
-    files: ['**/*.js', '**/*.cjs', '**/*.mjs'],
+    files: ['migrations/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+      sourceType: 'commonjs',
+    },
+    rules: {
+      '@typescript-eslint/no-var-requires': 'off',
+      'no-console': 'off',
+    },
+  },
+
+  // ============================================================
+  // JavaScript Files (Non-TypeScript)
+  // ============================================================
+  {
+    files: ['**/*.{js,cjs,mjs}'],
     ...tseslint.configs.disableTypeChecked,
   },
 
+  // ============================================================
   // Prettier Integration - MUST BE LAST
+  // ============================================================
   prettierConfig,
 ];
