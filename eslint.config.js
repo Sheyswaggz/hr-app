@@ -7,10 +7,10 @@ import prettierConfig from 'eslint-config-prettier';
 import globals from 'globals';
 
 /**
- * ESLint Flat Configuration for HR Application Backend API
+ * ESLint Flat Configuration for HR Application Backend
  * 
- * This configuration provides comprehensive linting for a TypeScript + Node.js/Express application
- * with security and code quality enforcement.
+ * This configuration provides comprehensive linting for a TypeScript + Node.js/Express backend
+ * with security, code quality, and import validation.
  * 
  * Features:
  * - TypeScript type-aware linting with strict rules
@@ -35,7 +35,6 @@ export default [
       '**/.tsbuildinfo',
       '**/*.min.js',
       '**/*.bundle.js',
-      '**/migrations/**',
     ],
   },
 
@@ -257,15 +256,6 @@ export default [
     languageOptions: {
       globals: {
         ...globals.node,
-        describe: 'readonly',
-        it: 'readonly',
-        test: 'readonly',
-        expect: 'readonly',
-        beforeEach: 'readonly',
-        afterEach: 'readonly',
-        beforeAll: 'readonly',
-        afterAll: 'readonly',
-        vi: 'readonly',
       },
     },
     rules: {
@@ -297,6 +287,24 @@ export default [
       'import/no-default-export': 'off',
       '@typescript-eslint/no-var-requires': 'off',
       'no-console': 'off',
+    },
+  },
+
+  // ============================================================
+  // Migration Files
+  // ============================================================
+  {
+    files: ['migrations/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+      sourceType: 'commonjs',
+    },
+    rules: {
+      '@typescript-eslint/no-var-requires': 'off',
+      'no-console': 'off',
+      'import/no-default-export': 'off',
     },
   },
 
