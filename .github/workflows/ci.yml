@@ -32,7 +32,7 @@ env:
 # Concurrency control - cancel in-progress runs for PRs
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   # Detect changes to optimize what to run
@@ -93,7 +93,14 @@ jobs:
 
       - name: Install dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm ci --prefer-offline --no-audit
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --prefer-offline --no-audit
+          else
+            echo "package-lock.json not found, running npm install to generate it"
+            npm install --package-lock-only
+            npm ci --prefer-offline --no-audit
+          fi
 
       - name: Verify installation
         run: |
@@ -123,6 +130,16 @@ jobs:
             node_modules
             ~/.npm
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install dependencies if cache miss
+        run: |
+          if [ ! -d "node_modules" ]; then
+            if [ -f package-lock.json ]; then
+              npm ci --prefer-offline --no-audit
+            else
+              npm install
+            fi
+          fi
 
       - name: Run ESLint
         run: npm run lint
@@ -155,6 +172,16 @@ jobs:
             node_modules
             ~/.npm
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install dependencies if cache miss
+        run: |
+          if [ ! -d "node_modules" ]; then
+            if [ -f package-lock.json ]; then
+              npm ci --prefer-offline --no-audit
+            else
+              npm install
+            fi
+          fi
 
       - name: Run TypeScript compiler
         run: npm run type-check
@@ -189,6 +216,16 @@ jobs:
             node_modules
             ~/.npm
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install dependencies if cache miss
+        run: |
+          if [ ! -d "node_modules" ]; then
+            if [ -f package-lock.json ]; then
+              npm ci --prefer-offline --no-audit
+            else
+              npm install
+            fi
+          fi
 
       - name: Run unit tests
         run: npm run test:unit -- --coverage
@@ -247,6 +284,16 @@ jobs:
             node_modules
             ~/.npm
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install dependencies if cache miss
+        run: |
+          if [ ! -d "node_modules" ]; then
+            if [ -f package-lock.json ]; then
+              npm ci --prefer-offline --no-audit
+            else
+              npm install
+            fi
+          fi
 
       - name: Wait for PostgreSQL
         run: |
@@ -317,6 +364,16 @@ jobs:
             ~/.npm
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
+      - name: Install dependencies if cache miss
+        run: |
+          if [ ! -d "node_modules" ]; then
+            if [ -f package-lock.json ]; then
+              npm ci --prefer-offline --no-audit
+            else
+              npm install
+            fi
+          fi
+
       - name: Run database migrations
         run: npm run migrate:up
         env:
@@ -380,6 +437,16 @@ jobs:
             ~/.npm
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
+      - name: Install dependencies if cache miss
+        run: |
+          if [ ! -d "node_modules" ]; then
+            if [ -f package-lock.json ]; then
+              npm ci --prefer-offline --no-audit
+            else
+              npm install
+            fi
+          fi
+
       - name: Run database tests
         run: npm run test:db
         env:
@@ -416,6 +483,16 @@ jobs:
             node_modules
             ~/.npm
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install dependencies if cache miss
+        run: |
+          if [ ! -d "node_modules" ]; then
+            if [ -f package-lock.json ]; then
+              npm ci --prefer-offline --no-audit
+            else
+              npm install
+            fi
+          fi
 
       - name: Build application
         run: npm run build
