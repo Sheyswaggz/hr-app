@@ -1,6 +1,7 @@
 // eslint.config.js
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import importPlugin from 'eslint-plugin-import';
 import securityPlugin from 'eslint-plugin-security';
 import prettierConfig from 'eslint-config-prettier';
 import globals from 'globals';
@@ -8,13 +9,14 @@ import globals from 'globals';
 /**
  * ESLint Flat Configuration for HR Application Backend
  * 
- * This configuration provides comprehensive linting for a TypeScript + Node.js/Express application
- * with security and code quality enforcement.
+ * This configuration provides comprehensive linting for a TypeScript + Node.js/Express backend
+ * with security, code quality, and import validation.
  * 
  * Features:
  * - TypeScript type-aware linting with strict rules
  * - Node.js and Express best practices
  * - Security vulnerability detection
+ * - Import/export validation and ordering
  * - Prettier integration for consistent formatting
  * 
  * @see https://eslint.org/docs/latest/use/configure/configuration-files-new
@@ -108,6 +110,73 @@ export default [
   },
 
   // ============================================================
+  // Import Plugin Configuration
+  // ============================================================
+  {
+    plugins: {
+      import: importPlugin,
+    },
+    settings: {
+      'import/resolver': {
+        typescript: {
+          alwaysTryTypes: true,
+          project: './tsconfig.json',
+        },
+        node: {
+          extensions: ['.js', '.ts'],
+        },
+      },
+      'import/parsers': {
+        '@typescript-eslint/parser': ['.ts'],
+      },
+    },
+    rules: {
+      // Import validation
+      'import/no-unresolved': 'error',
+      'import/named': 'error',
+      'import/default': 'error',
+      'import/namespace': 'error',
+      'import/no-absolute-path': 'error',
+      'import/no-self-import': 'error',
+      'import/no-cycle': ['error', { maxDepth: 10 }],
+      'import/no-useless-path-segments': 'error',
+      'import/no-relative-packages': 'error',
+
+      // Import style
+      'import/first': 'error',
+      'import/newline-after-import': 'error',
+      'import/no-duplicates': ['error', { 'prefer-inline': true }],
+      'import/no-mutable-exports': 'error',
+      'import/no-default-export': 'off',
+      'import/order': [
+        'error',
+        {
+          groups: [
+            'builtin',
+            'external',
+            'internal',
+            'parent',
+            'sibling',
+            'index',
+            'type',
+          ],
+          'newlines-between': 'always',
+          alphabetize: {
+            order: 'asc',
+            caseInsensitive: true,
+          },
+          pathGroups: [
+            {
+              pattern: '@/**',
+              group: 'internal',
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  // ============================================================
   // Security Plugin Configuration
   // ============================================================
   {
@@ -137,7 +206,7 @@ export default [
   {
     rules: {
       // Best practices
-      'no-console': 'off', // Console logging is acceptable in backend
+      'no-console': ['warn', { allow: ['warn', 'error', 'info'] }],
       'no-debugger': 'error',
       'no-alert': 'error',
       'no-var': 'error',
@@ -183,7 +252,7 @@ export default [
   // Test Files Configuration
   // ============================================================
   {
-    files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', '**/tests/**/*.{ts,tsx}'],
+    files: ['**/*.test.ts', '**/*.spec.ts', '**/tests/**/*.ts'],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -230,11 +299,11 @@ export default [
       globals: {
         ...globals.node,
       },
-      sourceType: 'commonjs',
     },
     rules: {
       '@typescript-eslint/no-var-requires': 'off',
       'no-console': 'off',
+      'import/no-default-export': 'off',
     },
   },
 
