@@ -9,12 +9,11 @@ import globals from 'globals';
 /**
  * ESLint Flat Configuration for HR Application Backend
  * 
- * This configuration provides comprehensive linting for a TypeScript + Node.js/Express backend
- * with security, code quality, and import validation.
+ * This configuration provides comprehensive linting for a TypeScript + Node.js/Express application
+ * with security and code quality enforcement.
  * 
  * Features:
  * - TypeScript type-aware linting with strict rules
- * - Node.js and Express best practices
  * - Security vulnerability detection
  * - Import/export validation and ordering
  * - Prettier integration for consistent formatting
@@ -252,7 +251,7 @@ export default [
   // Test Files Configuration
   // ============================================================
   {
-    files: ['**/*.test.ts', '**/*.spec.ts', '**/tests/**/*.ts'],
+    files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', '**/tests/**/*.ts'],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -299,6 +298,7 @@ export default [
       globals: {
         ...globals.node,
       },
+      sourceType: 'commonjs',
     },
     rules: {
       '@typescript-eslint/no-var-requires': 'off',
