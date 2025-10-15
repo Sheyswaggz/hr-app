@@ -1,11 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx",
-    "allowImportingTsExtensions": true,
+    "lib": ["ES2022"],
+    "module": "Node16",
+    "moduleResolution": "Node16",
     "resolveJsonModule": true,
     "allowJs": false,
     "checkJs": false,
@@ -22,7 +20,6 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
-    "verbatimModuleSyntax": false,
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -47,33 +44,22 @@
     "tsBuildInfoFile": "./.tsbuildinfo",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@components/*": ["./src/components/*"],
-      "@features/*": ["./src/features/*"],
-      "@services/*": ["./src/services/*"],
-      "@utils/*": ["./src/utils/*"],
-      "@hooks/*": ["./src/hooks/*"],
-      "@types/*": ["./src/types/*"],
-      "@config/*": ["./src/config/*"],
-      "@assets/*": ["./src/assets/*"]
-    }
+      "@/*": ["./src/*"]
+    },
+    "types": ["node"]
   },
   "include": [
-    "src/**/*",
     "src/**/*.ts",
-    "src/**/*.tsx",
     "src/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "build",
+    "tests",
     "**/*.test.ts",
-    "**/*.test.tsx",
     "**/*.spec.ts",
-    "**/*.spec.tsx",
-    "coverage",
-    ".vite"
+    "coverage"
   ],
   "ts-node": {
     "compilerOptions": {
