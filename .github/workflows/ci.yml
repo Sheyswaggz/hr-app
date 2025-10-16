@@ -327,6 +327,13 @@ jobs:
             ~/.npm
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
       - name: Clean database
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -d hr_app_test -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
