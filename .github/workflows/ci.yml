@@ -458,6 +458,13 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Ensure package-lock.json exists
+        run: |
+          if [ ! -f package-lock.json ]; then
+            echo "::notice::package-lock.json not found, generating it..."
+            npm install --package-lock-only --prefer-offline --no-audit
+          fi
+
       - name: Run npm audit
         run: |
           npm audit --audit-level=high --production
