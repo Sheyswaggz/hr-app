@@ -23,6 +23,8 @@ import type {
   RegisterData,
   PasswordResetRequest,
   PasswordResetConfirm,
+} from '../types/auth.js';
+import {
   isLoginCredentials,
   isRegisterData,
 } from '../types/auth.js';

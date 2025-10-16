@@ -17,8 +17,10 @@
 
 import { Router } from 'express';
 
+import { leaveController } from '../controllers/leave.controller.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
+import { UserRole } from '../types/index.js';
 
 /**
  * Create and configure leave management router
@@ -68,19 +70,15 @@ export function createLeaveRouter(): Router {
    */
   router.post(
     '/requests',
-    authorize(['EMPLOYEE', 'MANAGER', 'HR_ADMIN']),
-    async (req, res, next) => {
-      try {
-        // Controller implementation will be added
-        res.status(501).json({
-          success: false,
-          code: 'NOT_IMPLEMENTED',
-          message: 'Leave request submission endpoint not yet implemented',
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        next(error);
-      }
+    authorize([UserRole.HRAdmin, UserRole.Manager, UserRole.Employee]),
+    (req, res, next) => {
+      console.log('[LEAVE_ROUTES] Create leave request:', {
+        path: req.path,
+        method: req.method,
+        ip: req.ip,
+        timestamp: new Date().toISOString(),
+      });
+      return leaveController.createRequest(req, res, next);
     }
   );
 
@@ -102,19 +100,16 @@ export function createLeaveRouter(): Router {
    */
   router.get(
     '/requests/:id',
-    authorize(['EMPLOYEE', 'MANAGER', 'HR_ADMIN']),
-    async (req, res, next) => {
-      try {
-        // Controller implementation will be added
-        res.status(501).json({
-          success: false,
-          code: 'NOT_IMPLEMENTED',
-          message: 'Get leave request endpoint not yet implemented',
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        next(error);
-      }
+    authorize([UserRole.HRAdmin, UserRole.Manager, UserRole.Employee]),
+    (req, res, next) => {
+      console.log('[LEAVE_ROUTES] Get leave request:', {
+        path: req.path,
+        method: req.method,
+        requestId: req.params.id,
+        ip: req.ip,
+        timestamp: new Date().toISOString(),
+      });
+      return leaveController.getRequest(req, res, next);
     }
   );
 
@@ -144,19 +139,15 @@ export function createLeaveRouter(): Router {
    */
   router.get(
     '/my-requests',
-    authorize(['EMPLOYEE', 'MANAGER', 'HR_ADMIN']),
-    async (req, res, next) => {
-      try {
-        // Controller implementation will be added
-        res.status(501).json({
-          success: false,
-          code: 'NOT_IMPLEMENTED',
-          message: 'Get my leave requests endpoint not yet implemented',
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        next(error);
-      }
+    authorize([UserRole.HRAdmin, UserRole.Manager, UserRole.Employee]),
+    (req, res, next) => {
+      console.log('[LEAVE_ROUTES] Get my leave requests:', {
+        path: req.path,
+        method: req.method,
+        ip: req.ip,
+        timestamp: new Date().toISOString(),
+      });
+      return leaveController.getMyRequests(req, res, next);
     }
   );
 
@@ -187,19 +178,15 @@ export function createLeaveRouter(): Router {
    */
   router.get(
     '/team-requests',
-    authorize('MANAGER', { useHierarchy: true }),
-    async (req, res, next) => {
-      try {
-        // Controller implementation will be added
-        res.status(501).json({
-          success: false,
-          code: 'NOT_IMPLEMENTED',
-          message: 'Get team leave requests endpoint not yet implemented',
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        next(error);
-      }
+    authorize(UserRole.Manager, { useHierarchy: true }),
+    (req, res, next) => {
+      console.log('[LEAVE_ROUTES] Get team leave requests:', {
+        path: req.path,
+        method: req.method,
+        ip: req.ip,
+        timestamp: new Date().toISOString(),
+      });
+      return leaveController.getTeamRequests(req, res, next);
     }
   );
 
@@ -227,19 +214,16 @@ export function createLeaveRouter(): Router {
    */
   router.patch(
     '/requests/:id/approve',
-    authorize('MANAGER', { useHierarchy: true }),
-    async (req, res, next) => {
-      try {
-        // Controller implementation will be added
-        res.status(501).json({
-          success: false,
-          code: 'NOT_IMPLEMENTED',
-          message: 'Approve leave request endpoint not yet implemented',
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        next(error);
-      }
+    authorize(UserRole.Manager, { useHierarchy: true }),
+    (req, res, next) => {
+      console.log('[LEAVE_ROUTES] Approve leave request:', {
+        path: req.path,
+        method: req.method,
+        requestId: req.params.id,
+        ip: req.ip,
+        timestamp: new Date().toISOString(),
+      });
+      return leaveController.approveRequest(req, res, next);
     }
   );
 
@@ -267,19 +251,16 @@ export function createLeaveRouter(): Router {
    */
   router.patch(
     '/requests/:id/reject',
-    authorize('MANAGER', { useHierarchy: true }),
-    async (req, res, next) => {
-      try {
-        // Controller implementation will be added
-        res.status(501).json({
-          success: false,
-          code: 'NOT_IMPLEMENTED',
-          message: 'Reject leave request endpoint not yet implemented',
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        next(error);
-      }
+    authorize(UserRole.Manager, { useHierarchy: true }),
+    (req, res, next) => {
+      console.log('[LEAVE_ROUTES] Reject leave request:', {
+        path: req.path,
+        method: req.method,
+        requestId: req.params.id,
+        ip: req.ip,
+        timestamp: new Date().toISOString(),
+      });
+      return leaveController.rejectRequest(req, res, next);
     }
   );
 
@@ -311,19 +292,15 @@ export function createLeaveRouter(): Router {
    */
   router.get(
     '/my-balance',
-    authorize(['EMPLOYEE', 'MANAGER', 'HR_ADMIN']),
-    async (req, res, next) => {
-      try {
-        // Controller implementation will be added
-        res.status(501).json({
-          success: false,
-          code: 'NOT_IMPLEMENTED',
-          message: 'Get leave balance endpoint not yet implemented',
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        next(error);
-      }
+    authorize([UserRole.HRAdmin, UserRole.Manager, UserRole.Employee]),
+    (req, res, next) => {
+      console.log('[LEAVE_ROUTES] Get my leave balance:', {
+        path: req.path,
+        method: req.method,
+        ip: req.ip,
+        timestamp: new Date().toISOString(),
+      });
+      return leaveController.getMyBalance(req, res, next);
     }
   );
 
