@@ -196,7 +196,7 @@ jobs:
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
       - name: Run unit tests
-        run: npm run test -- --coverage --testPathPattern="tests/unit"
+        run: npm run test -- --coverage tests/unit
         env:
           NODE_ENV: test
 
@@ -260,11 +260,6 @@ jobs:
             sleep 2
           done
 
-      - name: Clean database
-        run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d hr_app_test -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-        continue-on-error: true
-
       - name: Run database migrations
         run: npm run migrate:up
         env:
@@ -272,7 +267,7 @@ jobs:
           NODE_ENV: test
 
       - name: Run integration tests
-        run: npm run test -- --testPathPattern="tests/integration"
+        run: npm run test -- tests/integration
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_app_test
           NODE_ENV: test
@@ -334,11 +329,6 @@ jobs:
             sleep 2
           done
 
-      - name: Clean database
-        run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d hr_app_test -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
-        continue-on-error: true
-
       - name: Run database migrations
         run: npm run migrate:up
         env:
@@ -346,7 +336,7 @@ jobs:
           NODE_ENV: test
 
       - name: Run E2E tests
-        run: npm run test -- --testPathPattern="tests/e2e"
+        run: npm run test -- tests/e2e
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_app_test
           NODE_ENV: test
