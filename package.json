@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest",
@@ -37,6 +37,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.1.0",
     "express-validator": "^7.2.1",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",

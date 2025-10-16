@@ -22,6 +22,7 @@ import { Router } from 'express';
 import { appraisalController } from '../controllers/appraisal.controller.js';
 import { authenticate } from '../middleware/authenticate.js';
 import { authorize } from '../middleware/authorize.js';
+import { UserRole } from '../types/index.js';
 
 /**
  * Create and configure appraisal router
@@ -45,37 +46,37 @@ function createAppraisalRouter(): Router {
   // Must be before /:id route to prevent path conflict
   router.get(
     '/my-appraisals',
-    authorize(['HR_ADMIN', 'MANAGER', 'EMPLOYEE']),
-    appraisalController.getMyAppraisals.bind(appraisalController)
+    authorize([UserRole.HRAdmin, UserRole.Manager, UserRole.Employee]),
+    appraisalController.getEmployeeAppraisals.bind(appraisalController)
   );
 
   // GET /api/appraisals/team - Get team appraisals (Manager only)
   // Must be before /:id route to prevent path conflict
   router.get(
     '/team',
-    authorize('MANAGER', { useHierarchy: true }),
-    appraisalController.getTeamAppraisals.bind(appraisalController)
+    authorize(UserRole.Manager, { useHierarchy: true }),
+    appraisalController.getManagerAppraisals.bind(appraisalController)
   );
 
   // POST /api/appraisals - Create appraisal cycle (Manager only)
   router.post(
     '/',
-    authorize('MANAGER', { useHierarchy: true }),
-    appraisalController.createAppraisal.bind(appraisalController)
+    authorize(UserRole.Manager, { useHierarchy: true }),
+    appraisalController.createAppraisalCycle.bind(appraisalController)
   );
 
   // GET /api/appraisals - Get all appraisals (HR Admin only)
   router.get(
     '/',
-    authorize('HR_ADMIN'),
-    appraisalController.getAllAppraisals.bind(appraisalController)
+    authorize(UserRole.HRAdmin),
+    appraisalController.getAppraisalCycles.bind(appraisalController)
   );
 
   // GET /api/appraisals/:id - Get appraisal by ID
   // Authorization is handled in controller based on user role and appraisal ownership
   router.get(
     '/:id',
-    authorize(['HR_ADMIN', 'MANAGER', 'EMPLOYEE']),
+    authorize([UserRole.HRAdmin, UserRole.Manager, UserRole.Employee]),
     appraisalController.getAppraisal.bind(appraisalController)
   );
 
@@ -83,7 +84,7 @@ function createAppraisalRouter(): Router {
   // Authorization is handled in controller to ensure employee owns the appraisal
   router.patch(
     '/:id/self-assessment',
-    authorize(['HR_ADMIN', 'MANAGER', 'EMPLOYEE']),
+    authorize([UserRole.HRAdmin, UserRole.Manager, UserRole.Employee]),
     appraisalController.submitSelfAssessment.bind(appraisalController)
   );
 
@@ -91,16 +92,16 @@ function createAppraisalRouter(): Router {
   // Authorization is handled in controller to ensure manager reviews their team member
   router.patch(
     '/:id/review',
-    authorize('MANAGER', { useHierarchy: true }),
-    appraisalController.submitReview.bind(appraisalController)
+    authorize(UserRole.Manager, { useHierarchy: true }),
+    appraisalController.submitManagerReview.bind(appraisalController)
   );
 
   // PATCH /api/appraisals/:id/goals - Update goals
   // Authorization is handled in controller based on appraisal ownership
   router.patch(
     '/:id/goals',
-    authorize(['HR_ADMIN', 'MANAGER', 'EMPLOYEE']),
-    appraisalController.updateGoals.bind(appraisalController)
+    authorize([UserRole.HRAdmin, UserRole.Manager, UserRole.Employee]),
+    appraisalController.addGoals.bind(appraisalController)
   );
 
   console.log('[APPRAISAL_ROUTES] Appraisal routes initialized successfully:', {

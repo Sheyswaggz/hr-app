@@ -1089,3 +1089,5 @@ export function resetEmailService(): void {
  * Default export: email service singleton
  */
 export default getEmailService();
+
+export const emailService = getEmailService();

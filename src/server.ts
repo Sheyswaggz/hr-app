@@ -17,6 +17,9 @@
  * @module server
  */
 
+// Load environment variables from .env file
+import 'dotenv/config';
+
 import { type Server } from 'http';
 
 import { app } from './app.js';
