@@ -93,7 +93,12 @@ jobs:
 
       - name: Install dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm ci --prefer-offline --no-audit
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --prefer-offline --no-audit
+          else
+            npm install --prefer-offline --no-audit
+          fi
 
       - name: Verify installation
         run: |
@@ -191,7 +196,7 @@ jobs:
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
       - name: Run unit tests
-        run: npm run test:unit -- --coverage
+        run: npm run test -- --coverage --testPathPattern="tests/unit"
         env:
           NODE_ENV: test
 
@@ -262,7 +267,7 @@ jobs:
           NODE_ENV: test
 
       - name: Run integration tests
-        run: npm run test:integration
+        run: npm run test -- --testPathPattern="tests/integration"
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_app_test
           NODE_ENV: test
@@ -324,7 +329,7 @@ jobs:
           NODE_ENV: test
 
       - name: Run E2E tests
-        run: npm run test:e2e
+        run: npm run test -- --testPathPattern="tests/e2e"
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_app_test
           NODE_ENV: test
