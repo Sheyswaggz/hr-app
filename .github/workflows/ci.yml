@@ -260,6 +260,11 @@ jobs:
             sleep 2
           done
 
+      - name: Clean database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d hr_app_test -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+        continue-on-error: true
+
       - name: Run database migrations
         run: npm run migrate:up
         env:
@@ -321,6 +326,11 @@ jobs:
             node_modules
             ~/.npm
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Clean database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d hr_app_test -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+        continue-on-error: true
 
       - name: Run database migrations
         run: npm run migrate:up
