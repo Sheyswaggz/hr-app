@@ -93,7 +93,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm install --prefer-offline --no-audit
+        run: npm install --no-audit
 
       - name: Verify installation
         run: |
