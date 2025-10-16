@@ -91,15 +91,24 @@ jobs:
           restore-keys: |
             ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-
 
+      - name: Clean node_modules if cache restored
+        if: steps.cache-node-modules.outputs.cache-hit == 'true'
+        run: rm -rf node_modules
+
       - name: Install dependencies
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: npm ci --prefer-offline --no-audit
+        run: npm install --no-audit
 
       - name: Verify installation
         run: |
           echo "Node version: $(node --version)"
           echo "NPM version: $(npm --version)"
           npm list --depth=0
+
+      - name: Cache package-lock.json
+        uses: actions/cache@v3
+        with:
+          path: package-lock.json
+          key: ${{ env.CACHE_VERSION }}-package-lock-${{ hashFiles('**/package.json') }}
 
   # Linting
   lint:
@@ -191,7 +200,7 @@ jobs:
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
       - name: Run unit tests
-        run: npm run test:unit -- --coverage
+        run: npm run test -- --coverage --testPathPattern="tests/unit"
         env:
           NODE_ENV: test
 
@@ -262,7 +271,7 @@ jobs:
           NODE_ENV: test
 
       - name: Run integration tests
-        run: npm run test:integration
+        run: npm run test -- --testPathPattern="tests/integration"
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_app_test
           NODE_ENV: test
@@ -324,7 +333,7 @@ jobs:
           NODE_ENV: test
 
       - name: Run E2E tests
-        run: npm run test:e2e
+        run: npm run test -- --testPathPattern="tests/e2e"
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_app_test
           NODE_ENV: test
@@ -453,14 +462,26 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Restore package-lock.json
+        uses: actions/cache@v3
+        with:
+          path: package-lock.json
+          key: ${{ env.CACHE_VERSION }}-package-lock-${{ hashFiles('**/package.json') }}
+
+      - name: Install dependencies if no lock file
+        run: |
+          if [ ! -f "package-lock.json" ]; then
+            npm install --package-lock-only --no-audit
+          fi
+
       - name: Run npm audit
         run: |
-          npm audit --audit-level=high --production
+          npm audit --audit-level=high --omit=dev
         continue-on-error: true
 
       - name: Check for critical vulnerabilities
         run: |
-          AUDIT_RESULT=$(npm audit --audit-level=critical --production --json)
+          AUDIT_RESULT=$(npm audit --audit-level=critical --omit=dev --json)
           CRITICAL_COUNT=$(echo $AUDIT_RESULT | jq '.metadata.vulnerabilities.critical // 0')
           HIGH_COUNT=$(echo $AUDIT_RESULT | jq '.metadata.vulnerabilities.high // 0')
           
