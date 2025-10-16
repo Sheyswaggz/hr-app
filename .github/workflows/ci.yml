@@ -91,8 +91,11 @@ jobs:
           restore-keys: |
             ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-
 
+      - name: Clean node_modules if cache restored
+        if: steps.cache-node-modules.outputs.cache-hit == 'true'
+        run: rm -rf node_modules
+
       - name: Install dependencies
-        if: steps.cache-node-modules.outputs.cache-hit != 'true'
         run: npm install --no-audit
 
       - name: Verify installation
