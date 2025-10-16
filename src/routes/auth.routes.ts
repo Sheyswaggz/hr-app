@@ -228,47 +228,71 @@ function createAuthRouter(): Router {
   router.use(generalAuthRateLimiter);
 
   /**
-   * POST /register
-   * 
-   * Register a new user account
-   * 
-   * Request body:
-   * {
-   *   email: string,
-   *   password: string,
-   *   passwordConfirm: string,
-   *   firstName: string,
-   *   lastName: string,
-   *   role?: UserRole,
-   *   departmentId?: string,
-   *   managerId?: string
-   * }
-   * 
-   * Response (201 Created):
-   * {
-   *   success: true,
-   *   message: string,
-   *   tokens: {
-   *     accessToken: string,
-   *     refreshToken: string,
-   *     expiresIn: number
-   *   },
-   *   user: {
-   *     id: string,
-   *     email: string,
-   *     firstName: string,
-   *     lastName: string,
-   *     role: UserRole,
-   *     isActive: boolean
-   *   },
-   *   timestamp: Date
-   * }
-   * 
-   * Error responses:
-   * - 400: Invalid request data
-   * - 409: Email already exists
-   * - 429: Rate limit exceeded
-   * - 500: Internal server error
+   * @swagger
+   * /api/auth/register:
+   *   post:
+   *     summary: Register a new user account
+   *     tags: [Authentication]
+   *     security: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - email
+   *               - password
+   *               - passwordConfirm
+   *               - firstName
+   *               - lastName
+   *             properties:
+   *               email:
+   *                 type: string
+   *                 format: email
+   *                 example: john.doe@example.com
+   *               password:
+   *                 type: string
+   *                 format: password
+   *                 minLength: 8
+   *                 example: SecurePass123!
+   *               passwordConfirm:
+   *                 type: string
+   *                 format: password
+   *                 example: SecurePass123!
+   *               firstName:
+   *                 type: string
+   *                 example: John
+   *               lastName:
+   *                 type: string
+   *                 example: Doe
+   *               role:
+   *                 $ref: '#/components/schemas/UserRole'
+   *     responses:
+   *       201:
+   *         description: User registered successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/LoginResponse'
+   *       400:
+   *         description: Invalid request data
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       409:
+   *         description: Email already exists
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       429:
+   *         description: Rate limit exceeded
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    */
   router.post(
     '/register',
@@ -285,43 +309,43 @@ function createAuthRouter(): Router {
   );
 
   /**
-   * POST /login
-   * 
-   * Authenticate user and generate tokens
-   * 
-   * Request body:
-   * {
-   *   email: string,
-   *   password: string,
-   *   rememberMe?: boolean
-   * }
-   * 
-   * Response (200 OK):
-   * {
-   *   success: true,
-   *   message: string,
-   *   tokens: {
-   *     accessToken: string,
-   *     refreshToken: string,
-   *     expiresIn: number
-   *   },
-   *   user: {
-   *     id: string,
-   *     email: string,
-   *     firstName: string,
-   *     lastName: string,
-   *     role: UserRole,
-   *     isActive: boolean
-   *   },
-   *   timestamp: Date
-   * }
-   * 
-   * Error responses:
-   * - 400: Invalid request data
-   * - 401: Invalid credentials
-   * - 403: Account inactive or locked
-   * - 429: Rate limit exceeded (too many login attempts)
-   * - 500: Internal server error
+   * @swagger
+   * /api/auth/login:
+   *   post:
+   *     summary: Authenticate user and generate tokens
+   *     tags: [Authentication]
+   *     security: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             $ref: '#/components/schemas/LoginRequest'
+   *     responses:
+   *       200:
+   *         description: Login successful
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/LoginResponse'
+   *       400:
+   *         description: Invalid request data
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       401:
+   *         description: Invalid credentials
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       429:
+   *         description: Too many login attempts
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    */
   router.post(
     '/login',
@@ -338,23 +362,33 @@ function createAuthRouter(): Router {
   );
 
   /**
-   * POST /logout
-   * 
-   * Logout user and invalidate token
-   * 
-   * Requires: Authentication (Bearer token in Authorization header)
-   * 
-   * Response (200 OK):
-   * {
-   *   success: true,
-   *   message: string,
-   *   timestamp: Date
-   * }
-   * 
-   * Error responses:
-   * - 401: Missing or invalid authentication token
-   * - 429: Rate limit exceeded
-   * - 500: Internal server error
+   * @swagger
+   * /api/auth/logout:
+   *   post:
+   *     summary: Logout user and invalidate token
+   *     tags: [Authentication]
+   *     security:
+   *       - bearerAuth: []
+   *     responses:
+   *       200:
+   *         description: Logout successful
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                   example: true
+   *                 message:
+   *                   type: string
+   *                   example: Logged out successfully
+   *       401:
+   *         description: Missing or invalid authentication token
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    */
   router.post(
     '/logout',
@@ -372,40 +406,43 @@ function createAuthRouter(): Router {
   );
 
   /**
-   * POST /refresh-token
-   * 
-   * Refresh access token using refresh token
-   * 
-   * Request body:
-   * {
-   *   refreshToken: string
-   * }
-   * 
-   * Response (200 OK):
-   * {
-   *   success: true,
-   *   message: string,
-   *   tokens: {
-   *     accessToken: string,
-   *     refreshToken: string,
-   *     expiresIn: number
-   *   },
-   *   user: {
-   *     id: string,
-   *     email: string,
-   *     firstName: string,
-   *     lastName: string,
-   *     role: UserRole,
-   *     isActive: boolean
-   *   },
-   *   timestamp: Date
-   * }
-   * 
-   * Error responses:
-   * - 400: Invalid request data
-   * - 401: Invalid or expired refresh token
-   * - 429: Rate limit exceeded
-   * - 500: Internal server error
+   * @swagger
+   * /api/auth/refresh-token:
+   *   post:
+   *     summary: Refresh access token using refresh token
+   *     tags: [Authentication]
+   *     security: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required:
+   *               - refreshToken
+   *             properties:
+   *               refreshToken:
+   *                 type: string
+   *                 example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+   *     responses:
+   *       200:
+   *         description: Token refreshed successfully
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/LoginResponse'
+   *       400:
+   *         description: Invalid request data
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
+   *       401:
+   *         description: Invalid or expired refresh token
+   *         content:
+   *           application/json:
+   *             schema:
+   *               $ref: '#/components/schemas/Error'
    */
   router.post(
     '/refresh-token',

@@ -97,7 +97,15 @@ export function healthCheck(): {
  * This block executes when the module is run directly (not imported).
  * It initializes the application and logs the results.
  */
-if (import.meta.url === `file://${process.argv[1]}`) {
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+import startServerMain from './server.js';
+
+const isMainModule = process.argv[1] 
+  ? resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])
+  : false;
+
+if (isMainModule) {
   console.log('[MAIN] HR Application starting...');
   console.log('[MAIN] Environment:', APP_METADATA.environment);
   
@@ -106,6 +114,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       if (success) {
         console.log('[MAIN] Application is ready');
         console.log('[MAIN] Health check:', JSON.stringify(healthCheck(), null, 2));
+        console.log('[MAIN] Starting HTTP server...');
+        
+        // Start the HTTP server
+        return startServerMain();
       } else {
         console.error('[MAIN] Application failed to initialize');
         process.exit(1);

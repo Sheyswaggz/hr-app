@@ -1,10 +1,12 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
 
 import { authRouter } from './routes/auth.routes.js';
 import { onboardingRouter } from './routes/onboarding.routes.js';
 import { appraisalRouter } from './routes/appraisal.routes.js';
 import { leaveRouter } from './routes/leave.routes.js';
+import { swaggerSpec } from './config/swagger.js';
 
 /**
  * Create and configure Express application
@@ -44,6 +46,12 @@ export function createApp(): Express {
     });
   });
 
+  // API Documentation
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'HR App API Documentation'
+  }));
+
   // API Routes
   app.use('/api/auth', authRouter);
   app.use('/api/onboarding', onboardingRouter);
@@ -79,4 +87,7 @@ export function createApp(): Express {
   return app;
 }
 
-export default createApp();
+// Export the app instance
+export const app = createApp();
+
+export default app;

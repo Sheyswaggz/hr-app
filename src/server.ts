@@ -459,7 +459,14 @@ async function main(): Promise<void> {
  * 
  * Only run if this module is the main entry point.
  */
-if (import.meta.url === `file://${process.argv[1]}`) {
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+
+const isMainModule = process.argv[1] 
+  ? resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])
+  : false;
+
+if (isMainModule) {
   void main();
 }
 

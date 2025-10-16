@@ -1547,4 +1547,31 @@ Days: ${request.daysCount}
   private generateRejectionEmailHtml(employee: EmployeeRecord, request: LeaveRequest): string {
     return `
       <h2>Leave Request Rejected</h2>
-      <p>Your leave request has been rejecte
+      <p>Your leave request has been rejected.</p>
+      <ul>
+        <li><strong>Leave Type:</strong> ${request.leaveType}</li>
+        <li><strong>Start Date:</strong> ${request.startDate.toLocaleDateString()}</li>
+        <li><strong>End Date:</strong> ${request.endDate.toLocaleDateString()}</li>
+        <li><strong>Days:</strong> ${request.daysCount}</li>
+        <li><strong>Rejection Reason:</strong> ${request.rejectionReason}</li>
+      </ul>
+    `;
+  }
+
+  /**
+   * Generate rejection email text
+   */
+  private generateRejectionEmailText(employee: EmployeeRecord, request: LeaveRequest): string {
+    return `
+Leave Request Rejected
+
+Your leave request has been rejected.
+
+Leave Type: ${request.leaveType}
+Start Date: ${request.startDate.toLocaleDateString()}
+End Date: ${request.endDate.toLocaleDateString()}
+Days: ${request.daysCount}
+Rejection Reason: ${request.rejectionReason}
+    `;
+  }
+}
