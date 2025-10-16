@@ -1,24 +1,40 @@
 /**
  * Email Service Module
  * 
- * Provides email sending functionality using nodemailer with SMTP transport.
- * Supports HTML and plain text emails with retry logic and error handling.
- * All configuration is loaded from environment variables via email config module.
+ * Provides email sending functionality using nodemailer.
+ * Supports transactional emails for authentication, onboarding, appraisals, and leave management.
+ * All emails are sent asynchronously with error handling and logging.
  * 
  * @module services/email
  */
 
-import nodemailer, { Transporter } from 'nodemailer';
-import { getEmailConfig, isEmailEnabled } from '../config/email';
+import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
+import { getEmailConfig } from '../config/email.js';
 
 /**
- * Email sending options
+ * Email recipient interface
  */
-export interface EmailOptions {
+export interface EmailRecipient {
   /**
    * Recipient email address
    */
-  readonly to: string;
+  readonly email: string;
+
+  /**
+   * Recipient display name (optional)
+   */
+  readonly name?: string;
+}
+
+/**
+ * Email options interface
+ */
+export interface EmailOptions {
+  /**
+   * Email recipient(s)
+   */
+  readonly to: EmailRecipient | EmailRecipient[];
 
   /**
    * Email subject line
@@ -28,40 +44,40 @@ export interface EmailOptions {
   /**
    * Plain text email body
    */
-  readonly text?: string;
+  readonly text: string;
 
   /**
-   * HTML email body
+   * HTML email body (optional)
    */
   readonly html?: string;
 
   /**
-   * Optional CC recipients
+   * CC recipients (optional)
    */
-  readonly cc?: string | string[];
+  readonly cc?: EmailRecipient | EmailRecipient[];
 
   /**
-   * Optional BCC recipients
+   * BCC recipients (optional)
    */
-  readonly bcc?: string | string[];
+  readonly bcc?: EmailRecipient | EmailRecipient[];
 
   /**
-   * Optional reply-to address
+   * Reply-to address (optional)
    */
   readonly replyTo?: string;
 }
 
 /**
- * Email sending result
+ * Email send result interface
  */
-export interface EmailResult {
+export interface EmailSendResult {
   /**
    * Whether email was sent successfully
    */
   readonly success: boolean;
 
   /**
-   * Message ID from SMTP server (if successful)
+   * Message ID from email server (if successful)
    */
   readonly messageId?: string;
 
@@ -71,15 +87,205 @@ export interface EmailResult {
   readonly error?: string;
 
   /**
-   * Number of retry attempts made
+   * Timestamp when email was sent
    */
-  readonly attempts: number;
+  readonly timestamp: Date;
+}
+
+/**
+ * Onboarding task notification data
+ */
+export interface OnboardingTaskData {
+  /**
+   * Employee name
+   */
+  readonly employeeName: string;
+
+  /**
+   * Task title
+   */
+  readonly taskTitle: string;
+
+  /**
+   * Task description
+   */
+  readonly taskDescription: string;
+
+  /**
+   * Task due date
+   */
+  readonly dueDate: Date;
+
+  /**
+   * Dashboard URL
+   */
+  readonly dashboardUrl: string;
+}
+
+/**
+ * Appraisal notification data
+ */
+export interface AppraisalNotificationData {
+  /**
+   * Employee name
+   */
+  readonly employeeName: string;
+
+  /**
+   * Appraisal period
+   */
+  readonly period: string;
+
+  /**
+   * Appraisal status
+   */
+  readonly status: string;
+
+  /**
+   * Dashboard URL
+   */
+  readonly dashboardUrl: string;
+
+  /**
+   * Due date (optional)
+   */
+  readonly dueDate?: Date;
+}
+
+/**
+ * Leave request notification data
+ */
+export interface LeaveRequestData {
+  /**
+   * Employee name who requested leave
+   */
+  readonly employeeName: string;
+
+  /**
+   * Manager name who will approve/reject
+   */
+  readonly managerName: string;
+
+  /**
+   * Leave type (annual, sick, unpaid, other)
+   */
+  readonly leaveType: string;
+
+  /**
+   * Leave start date
+   */
+  readonly startDate: Date;
+
+  /**
+   * Leave end date
+   */
+  readonly endDate: Date;
+
+  /**
+   * Number of days requested
+   */
+  readonly days: number;
+
+  /**
+   * Leave request reason
+   */
+  readonly reason: string;
+
+  /**
+   * Dashboard URL for manager to review
+   */
+  readonly dashboardUrl: string;
+}
+
+/**
+ * Leave approval notification data
+ */
+export interface LeaveApprovalData {
+  /**
+   * Employee name who requested leave
+   */
+  readonly employeeName: string;
+
+  /**
+   * Manager name who approved
+   */
+  readonly managerName: string;
+
+  /**
+   * Leave type (annual, sick, unpaid, other)
+   */
+  readonly leaveType: string;
+
+  /**
+   * Leave start date
+   */
+  readonly startDate: Date;
+
+  /**
+   * Leave end date
+   */
+  readonly endDate: Date;
+
+  /**
+   * Number of days approved
+   */
+  readonly days: number;
+
+  /**
+   * Dashboard URL
+   */
+  readonly dashboardUrl: string;
+}
+
+/**
+ * Leave rejection notification data
+ */
+export interface LeaveRejectionData {
+  /**
+   * Employee name who requested leave
+   */
+  readonly employeeName: string;
+
+  /**
+   * Manager name who rejected
+   */
+  readonly managerName: string;
+
+  /**
+   * Leave type (annual, sick, unpaid, other)
+   */
+  readonly leaveType: string;
+
+  /**
+   * Leave start date
+   */
+  readonly startDate: Date;
+
+  /**
+   * Leave end date
+   */
+  readonly endDate: Date;
+
+  /**
+   * Number of days requested
+   */
+  readonly days: number;
+
+  /**
+   * Rejection reason
+   */
+  readonly rejectionReason: string;
+
+  /**
+   * Dashboard URL
+   */
+  readonly dashboardUrl: string;
 }
 
 /**
  * Email Service Class
  * 
- * Handles email sending with retry logic and error handling.
+ * Handles all email sending operations for the HR application.
  * Uses nodemailer with SMTP transport configured from environment variables.
  */
 export class EmailService {
@@ -87,646 +293,766 @@ export class EmailService {
   private readonly config = getEmailConfig();
 
   /**
-   * Initialize email service and create SMTP transport
+   * Initialize email service
    * 
-   * @private
+   * Creates nodemailer transporter with SMTP configuration.
+   * Logs initialization status and configuration details.
    */
-  private initializeTransporter(): void {
-    if (this.transporter) {
+  constructor() {
+    if (!this.config.enabled) {
+      console.log('[EMAIL_SERVICE] Email service is disabled');
       return;
     }
 
-    console.log('[EMAIL_SERVICE] Initializing SMTP transport...', {
-      host: this.config.host,
-      port: this.config.port,
-      secure: this.config.secure,
-      hasAuth: !!this.config.auth,
-    });
+    try {
+      this.transporter = nodemailer.createTransport({
+        host: this.config.host,
+        port: this.config.port,
+        secure: this.config.secure,
+        auth: this.config.auth,
+        connectionTimeout: this.config.connectionTimeout,
+        socketTimeout: this.config.socketTimeout,
+      });
 
-    this.transporter = nodemailer.createTransport({
-      host: this.config.host,
-      port: this.config.port,
-      secure: this.config.secure,
-      auth: this.config.auth,
-      connectionTimeout: this.config.connectionTimeout,
-      socketTimeout: this.config.socketTimeout,
-    });
-
-    console.log('[EMAIL_SERVICE] SMTP transport initialized successfully');
+      console.log('[EMAIL_SERVICE] Email service initialized successfully:', {
+        host: this.config.host,
+        port: this.config.port,
+        secure: this.config.secure,
+        hasAuth: !!this.config.auth,
+      });
+    } catch (error) {
+      console.error('[EMAIL_SERVICE] Failed to initialize email service:', {
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
+      });
+      throw error;
+    }
   }
 
   /**
-   * Send email with retry logic
+   * Format email recipient
    * 
-   * @param {EmailOptions} options - Email sending options
-   * @returns {Promise<EmailResult>} Email sending result
+   * @private
+   * @param {EmailRecipient | EmailRecipient[]} recipient - Recipient(s) to format
+   * @returns {string} Formatted recipient string
+   */
+  private formatRecipient(recipient: EmailRecipient | EmailRecipient[]): string {
+    const recipients = Array.isArray(recipient) ? recipient : [recipient];
+    return recipients
+      .map(r => (r.name ? `"${r.name}" <${r.email}>` : r.email))
+      .join(', ');
+  }
+
+  /**
+   * Send email
+   * 
+   * @param {EmailOptions} options - Email options
+   * @returns {Promise<EmailSendResult>} Send result
    * 
    * @example
    * const result = await emailService.sendEmail({
-   *   to: 'user@example.com',
+   *   to: { email: 'user@example.com', name: 'John Doe' },
    *   subject: 'Welcome',
-   *   html: '<h1>Welcome to our platform!</h1>',
+   *   text: 'Welcome to our platform!',
+   *   html: '<p>Welcome to our platform!</p>'
    * });
    */
-  async sendEmail(options: EmailOptions): Promise<EmailResult> {
-    // Check if email service is enabled
-    if (!isEmailEnabled()) {
-      console.log('[EMAIL_SERVICE] Email service is disabled, skipping send:', {
-        to: options.to,
+  async sendEmail(options: EmailOptions): Promise<EmailSendResult> {
+    const startTime = Date.now();
+
+    if (!this.config.enabled) {
+      console.log('[EMAIL_SERVICE] Email service disabled, skipping send:', {
+        to: this.formatRecipient(options.to),
         subject: options.subject,
       });
       return {
         success: false,
         error: 'Email service is disabled',
-        attempts: 0,
+        timestamp: new Date(),
       };
     }
 
-    // Validate email options
-    const validationError = this.validateEmailOptions(options);
-    if (validationError) {
-      console.error('[EMAIL_SERVICE] Invalid email options:', {
-        error: validationError,
-        to: options.to,
-        subject: options.subject,
-      });
+    if (!this.transporter) {
+      console.error('[EMAIL_SERVICE] Email transporter not initialized');
       return {
         success: false,
-        error: validationError,
-        attempts: 0,
+        error: 'Email transporter not initialized',
+        timestamp: new Date(),
       };
     }
 
-    // Initialize transporter if not already done
-    this.initializeTransporter();
+    try {
+      const mailOptions = {
+        from: this.config.from,
+        to: this.formatRecipient(options.to),
+        subject: options.subject,
+        text: options.text,
+        html: options.html,
+        cc: options.cc ? this.formatRecipient(options.cc) : undefined,
+        bcc: options.bcc ? this.formatRecipient(options.bcc) : undefined,
+        replyTo: options.replyTo,
+      };
 
-    // Attempt to send email with retries
-    let lastError: Error | null = null;
-    for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
-      try {
-        console.log('[EMAIL_SERVICE] Sending email (attempt ${attempt}/${this.config.maxRetries})...', {
-          to: options.to,
-          subject: options.subject,
-          attempt,
-        });
+      console.log('[EMAIL_SERVICE] Sending email:', {
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        hasHtml: !!mailOptions.html,
+        timestamp: new Date().toISOString(),
+      });
 
-        const info = await this.transporter!.sendMail({
-          from: this.config.from,
-          to: options.to,
-          subject: options.subject,
-          text: options.text,
-          html: options.html,
-          cc: options.cc,
-          bcc: options.bcc,
-          replyTo: options.replyTo,
-        });
+      const info = await this.transporter.sendMail(mailOptions);
+      const duration = Date.now() - startTime;
 
-        console.log('[EMAIL_SERVICE] Email sent successfully:', {
-          messageId: info.messageId,
-          to: options.to,
-          subject: options.subject,
-          attempt,
-        });
+      console.log('[EMAIL_SERVICE] Email sent successfully:', {
+        messageId: info.messageId,
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        duration: `${duration}ms`,
+        timestamp: new Date().toISOString(),
+      });
 
-        return {
-          success: true,
-          messageId: info.messageId,
-          attempts: attempt,
-        };
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-        console.error('[EMAIL_SERVICE] Failed to send email (attempt ${attempt}/${this.config.maxRetries}):', {
-          error: lastError.message,
-          to: options.to,
-          subject: options.subject,
-          attempt,
-        });
+      return {
+        success: true,
+        messageId: info.messageId,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      console.error('[EMAIL_SERVICE] Failed to send email:', {
+        error: error instanceof Error ? error.message : String(error),
+        to: this.formatRecipient(options.to),
+        subject: options.subject,
+        duration: `${duration}ms`,
+        timestamp: new Date().toISOString(),
+      });
 
-        // Wait before retry (exponential backoff)
-        if (attempt < this.config.maxRetries) {
-          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-          console.log('[EMAIL_SERVICE] Retrying in ${delay}ms...');
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-      }
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date(),
+      };
     }
-
-    // All retries failed
-    console.error('[EMAIL_SERVICE] All retry attempts failed:', {
-      error: lastError?.message,
-      to: options.to,
-      subject: options.subject,
-      attempts: this.config.maxRetries,
-    });
-
-    return {
-      success: false,
-      error: lastError?.message || 'Unknown error',
-      attempts: this.config.maxRetries,
-    };
   }
 
   /**
-   * Send onboarding welcome email to new employee
+   * Send welcome email to new user
    * 
-   * @param {string} employeeEmail - Employee email address
-   * @param {string} employeeName - Employee full name
-   * @param {Date} startDate - Employee start date
-   * @returns {Promise<EmailResult>} Email sending result
+   * @param {EmailRecipient} recipient - Email recipient
+   * @param {string} temporaryPassword - Temporary password for first login
+   * @returns {Promise<EmailSendResult>} Send result
    */
-  async sendOnboardingEmail(
-    employeeEmail: string,
-    employeeName: string,
-    startDate: Date
-  ): Promise<EmailResult> {
-    const formattedDate = startDate.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+  async sendWelcomeEmail(
+    recipient: EmailRecipient,
+    temporaryPassword: string
+  ): Promise<EmailSendResult> {
+    const subject = 'Welcome to HR Management System';
+    const text = `
+Welcome to the HR Management System!
+
+Your account has been created successfully.
+
+Login Credentials:
+Email: ${recipient.email}
+Temporary Password: ${temporaryPassword}
+
+Please log in and change your password immediately.
+
+Best regards,
+HR Team
+    `.trim();
 
     const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
-            .content { padding: 20px; background-color: #f9f9f9; }
-            .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
-            .button { display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>Welcome to Our Team!</h1>
-            </div>
-            <div class="content">
-              <h2>Hello ${employeeName},</h2>
-              <p>We're excited to welcome you to our organization! Your onboarding journey begins on <strong>${formattedDate}</strong>.</p>
-              <p>Here's what you can expect:</p>
-              <ul>
-                <li>Access to your onboarding tasks and checklist</li>
-                <li>Introduction to your team and manager</li>
-                <li>Setup of your workspace and tools</li>
-                <li>Overview of company policies and procedures</li>
-              </ul>
-              <p>Please log in to your account to view your personalized onboarding tasks.</p>
-              <p>If you have any questions, don't hesitate to reach out to your manager or HR team.</p>
-              <p>We look forward to working with you!</p>
-            </div>
-            <div class="footer">
-              <p>This is an automated message from the HR Management System.</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    const text = `
-Welcome to Our Team!
-
-Hello ${employeeName},
-
-We're excited to welcome you to our organization! Your onboarding journey begins on ${formattedDate}.
-
-Here's what you can expect:
-- Access to your onboarding tasks and checklist
-- Introduction to your team and manager
-- Setup of your workspace and tools
-- Overview of company policies and procedures
-
-Please log in to your account to view your personalized onboarding tasks.
-
-If you have any questions, don't hesitate to reach out to your manager or HR team.
-
-We look forward to working with you!
-
----
-This is an automated message from the HR Management System.
-    `;
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background-color: #f9f9f9; }
+    .credentials { background-color: #fff; padding: 15px; border-left: 4px solid #4CAF50; margin: 20px 0; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+    .button { display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Welcome to HR Management System</h1>
+    </div>
+    <div class="content">
+      <p>Hello ${recipient.name || 'there'},</p>
+      <p>Your account has been created successfully. You can now access the HR Management System.</p>
+      
+      <div class="credentials">
+        <h3>Login Credentials</h3>
+        <p><strong>Email:</strong> ${recipient.email}</p>
+        <p><strong>Temporary Password:</strong> ${temporaryPassword}</p>
+      </div>
+      
+      <p><strong>Important:</strong> Please log in and change your password immediately for security reasons.</p>
+      
+      <p style="text-align: center; margin-top: 30px;">
+        <a href="${this.config.environment === 'production' ? 'https://hr.example.com' : 'http://localhost:3000'}/login" class="button">Log In Now</a>
+      </p>
+    </div>
+    <div class="footer">
+      <p>This is an automated message. Please do not reply to this email.</p>
+      <p>&copy; ${new Date().getFullYear()} HR Management System. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
 
     return this.sendEmail({
-      to: employeeEmail,
-      subject: 'Welcome to the Team - Your Onboarding Journey Begins',
-      html,
+      to: recipient,
+      subject,
       text,
+      html,
     });
   }
 
   /**
-   * Send task assignment notification email
+   * Send password reset email
    * 
-   * @param {string} employeeEmail - Employee email address
-   * @param {string} employeeName - Employee full name
-   * @param {string} taskTitle - Task title
-   * @param {string} taskDescription - Task description
-   * @param {Date} dueDate - Task due date
-   * @returns {Promise<EmailResult>} Email sending result
+   * @param {EmailRecipient} recipient - Email recipient
+   * @param {string} resetToken - Password reset token
+   * @returns {Promise<EmailSendResult>} Send result
    */
-  async sendTaskAssignmentEmail(
-    employeeEmail: string,
-    employeeName: string,
-    taskTitle: string,
-    taskDescription: string,
-    dueDate: Date
-  ): Promise<EmailResult> {
-    const formattedDate = dueDate.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+  async sendPasswordResetEmail(
+    recipient: EmailRecipient,
+    resetToken: string
+  ): Promise<EmailSendResult> {
+    const resetUrl = `${this.config.environment === 'production' ? 'https://hr.example.com' : 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+    
+    const subject = 'Password Reset Request';
+    const text = `
+You have requested to reset your password.
+
+Click the link below to reset your password:
+${resetUrl}
+
+This link will expire in 1 hour.
+
+If you did not request this, please ignore this email.
+
+Best regards,
+HR Team
+    `.trim();
 
     const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #2196F3; color: white; padding: 20px; text-align: center; }
-            .content { padding: 20px; background-color: #f9f9f9; }
-            .task-box { background-color: white; padding: 15px; border-left: 4px solid #2196F3; margin: 15px 0; }
-            .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>New Task Assigned</h1>
-            </div>
-            <div class="content">
-              <h2>Hello ${employeeName},</h2>
-              <p>A new onboarding task has been assigned to you.</p>
-              <div class="task-box">
-                <h3>${taskTitle}</h3>
-                <p>${taskDescription}</p>
-                <p><strong>Due Date:</strong> ${formattedDate}</p>
-              </div>
-              <p>Please log in to your account to view the task details and mark it as complete when finished.</p>
-            </div>
-            <div class="footer">
-              <p>This is an automated message from the HR Management System.</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    const text = `
-New Task Assigned
-
-Hello ${employeeName},
-
-A new onboarding task has been assigned to you.
-
-Task: ${taskTitle}
-Description: ${taskDescription}
-Due Date: ${formattedDate}
-
-Please log in to your account to view the task details and mark it as complete when finished.
-
----
-This is an automated message from the HR Management System.
-    `;
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #2196F3; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background-color: #f9f9f9; }
+    .button { display: inline-block; padding: 10px 20px; background-color: #2196F3; color: white; text-decoration: none; border-radius: 4px; }
+    .warning { background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Password Reset Request</h1>
+    </div>
+    <div class="content">
+      <p>Hello ${recipient.name || 'there'},</p>
+      <p>You have requested to reset your password for the HR Management System.</p>
+      
+      <p style="text-align: center; margin: 30px 0;">
+        <a href="${resetUrl}" class="button">Reset Password</a>
+      </p>
+      
+      <div class="warning">
+        <p><strong>Important:</strong></p>
+        <ul>
+          <li>This link will expire in 1 hour</li>
+          <li>If you did not request this, please ignore this email</li>
+          <li>Your password will not change until you create a new one</li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer">
+      <p>This is an automated message. Please do not reply to this email.</p>
+      <p>&copy; ${new Date().getFullYear()} HR Management System. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
 
     return this.sendEmail({
-      to: employeeEmail,
-      subject: `New Task Assigned: ${taskTitle}`,
-      html,
+      to: recipient,
+      subject,
       text,
+      html,
     });
   }
 
   /**
-   * Send appraisal cycle notification email to employee
+   * Send onboarding task assignment notification
    * 
-   * @param {string} employeeEmail - Employee email address
-   * @param {string} employeeName - Employee full name
-   * @param {string} reviewerName - Manager/reviewer full name
-   * @param {Date} reviewPeriodStart - Review period start date
-   * @param {Date} reviewPeriodEnd - Review period end date
-   * @returns {Promise<EmailResult>} Email sending result
+   * @param {EmailRecipient} recipient - Email recipient
+   * @param {OnboardingTaskData} taskData - Task data
+   * @returns {Promise<EmailSendResult>} Send result
    */
-  async sendAppraisalCycleNotification(
-    employeeEmail: string,
-    employeeName: string,
-    reviewerName: string,
-    reviewPeriodStart: Date,
-    reviewPeriodEnd: Date
-  ): Promise<EmailResult> {
-    const formattedStartDate = reviewPeriodStart.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+  async sendOnboardingTaskNotification(
+    recipient: EmailRecipient,
+    taskData: OnboardingTaskData
+  ): Promise<EmailSendResult> {
+    const subject = `New Onboarding Task: ${taskData.taskTitle}`;
+    const text = `
+Hello ${taskData.employeeName},
 
-    const formattedEndDate = reviewPeriodEnd.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+You have been assigned a new onboarding task.
+
+Task: ${taskData.taskTitle}
+Description: ${taskData.taskDescription}
+Due Date: ${taskData.dueDate.toLocaleDateString()}
+
+Please complete this task by the due date.
+
+View your tasks: ${taskData.dashboardUrl}
+
+Best regards,
+HR Team
+    `.trim();
 
     const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #FF9800; color: white; padding: 20px; text-align: center; }
-            .content { padding: 20px; background-color: #f9f9f9; }
-            .info-box { background-color: white; padding: 15px; border-left: 4px solid #FF9800; margin: 15px 0; }
-            .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
-            .button { display: inline-block; padding: 10px 20px; background-color: #FF9800; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>Performance Appraisal Cycle Initiated</h1>
-            </div>
-            <div class="content">
-              <h2>Hello ${employeeName},</h2>
-              <p>Your manager, <strong>${reviewerName}</strong>, has initiated a performance appraisal cycle for you.</p>
-              <div class="info-box">
-                <h3>Review Period</h3>
-                <p><strong>From:</strong> ${formattedStartDate}</p>
-                <p><strong>To:</strong> ${formattedEndDate}</p>
-              </div>
-              <p>As part of this appraisal cycle, you will be able to:</p>
-              <ul>
-                <li>Submit a self-assessment reflecting on your performance</li>
-                <li>Set and track your professional goals</li>
-                <li>Review feedback and ratings from your manager</li>
-              </ul>
-              <p>Please log in to your account to begin your self-assessment when you're ready.</p>
-              <p>This is an important opportunity to reflect on your achievements and discuss your career development with your manager.</p>
-            </div>
-            <div class="footer">
-              <p>This is an automated message from the HR Management System.</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    const text = `
-Performance Appraisal Cycle Initiated
-
-Hello ${employeeName},
-
-Your manager, ${reviewerName}, has initiated a performance appraisal cycle for you.
-
-Review Period:
-From: ${formattedStartDate}
-To: ${formattedEndDate}
-
-As part of this appraisal cycle, you will be able to:
-- Submit a self-assessment reflecting on your performance
-- Set and track your professional goals
-- Review feedback and ratings from your manager
-
-Please log in to your account to begin your self-assessment when you're ready.
-
-This is an important opportunity to reflect on your achievements and discuss your career development with your manager.
-
----
-This is an automated message from the HR Management System.
-    `;
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #9C27B0; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background-color: #f9f9f9; }
+    .task-details { background-color: #fff; padding: 15px; border-left: 4px solid #9C27B0; margin: 20px 0; }
+    .button { display: inline-block; padding: 10px 20px; background-color: #9C27B0; color: white; text-decoration: none; border-radius: 4px; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>New Onboarding Task</h1>
+    </div>
+    <div class="content">
+      <p>Hello ${taskData.employeeName},</p>
+      <p>You have been assigned a new onboarding task.</p>
+      
+      <div class="task-details">
+        <h3>${taskData.taskTitle}</h3>
+        <p><strong>Description:</strong> ${taskData.taskDescription}</p>
+        <p><strong>Due Date:</strong> ${taskData.dueDate.toLocaleDateString()}</p>
+      </div>
+      
+      <p>Please complete this task by the due date.</p>
+      
+      <p style="text-align: center; margin-top: 30px;">
+        <a href="${taskData.dashboardUrl}" class="button">View My Tasks</a>
+      </p>
+    </div>
+    <div class="footer">
+      <p>This is an automated message. Please do not reply to this email.</p>
+      <p>&copy; ${new Date().getFullYear()} HR Management System. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
 
     return this.sendEmail({
-      to: employeeEmail,
-      subject: 'Performance Appraisal Cycle Initiated',
-      html,
+      to: recipient,
+      subject,
       text,
+      html,
     });
   }
 
   /**
-   * Send review completed notification email to employee
+   * Send appraisal notification
    * 
-   * @param {string} employeeEmail - Employee email address
-   * @param {string} employeeName - Employee full name
-   * @param {string} reviewerName - Manager/reviewer full name
-   * @param {number} rating - Performance rating (1-5)
-   * @param {Date} reviewPeriodStart - Review period start date
-   * @param {Date} reviewPeriodEnd - Review period end date
-   * @returns {Promise<EmailResult>} Email sending result
+   * @param {EmailRecipient} recipient - Email recipient
+   * @param {AppraisalNotificationData} appraisalData - Appraisal data
+   * @returns {Promise<EmailSendResult>} Send result
    */
-  async sendReviewCompletedNotification(
-    employeeEmail: string,
-    employeeName: string,
-    reviewerName: string,
-    rating: number,
-    reviewPeriodStart: Date,
-    reviewPeriodEnd: Date
-  ): Promise<EmailResult> {
-    const formattedStartDate = reviewPeriodStart.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+  async sendAppraisalNotification(
+    recipient: EmailRecipient,
+    appraisalData: AppraisalNotificationData
+  ): Promise<EmailSendResult> {
+    const subject = `Appraisal ${appraisalData.status}: ${appraisalData.period}`;
+    const text = `
+Hello ${appraisalData.employeeName},
 
-    const formattedEndDate = reviewPeriodEnd.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+Your appraisal for ${appraisalData.period} has been ${appraisalData.status.toLowerCase()}.
 
-    const ratingStars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+${appraisalData.dueDate ? `Due Date: ${appraisalData.dueDate.toLocaleDateString()}` : ''}
+
+View your appraisal: ${appraisalData.dashboardUrl}
+
+Best regards,
+HR Team
+    `.trim();
 
     const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
-            .content { padding: 20px; background-color: #f9f9f9; }
-            .info-box { background-color: white; padding: 15px; border-left: 4px solid #4CAF50; margin: 15px 0; }
-            .rating { font-size: 24px; color: #FF9800; margin: 10px 0; }
-            .footer { padding: 20px; text-align: center; font-size: 12px; color: #666; }
-            .button { display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>Performance Review Completed</h1>
-            </div>
-            <div class="content">
-              <h2>Hello ${employeeName},</h2>
-              <p>Your manager, <strong>${reviewerName}</strong>, has completed your performance review.</p>
-              <div class="info-box">
-                <h3>Review Period</h3>
-                <p><strong>From:</strong> ${formattedStartDate}</p>
-                <p><strong>To:</strong> ${formattedEndDate}</p>
-                <h3>Overall Rating</h3>
-                <div class="rating">${ratingStars} (${rating}/5)</div>
-              </div>
-              <p>Your complete performance review, including detailed feedback and comments, is now available in your account.</p>
-              <p>Please log in to view:</p>
-              <ul>
-                <li>Detailed feedback from your manager</li>
-                <li>Your self-assessment and manager's review side-by-side</li>
-                <li>Goals and achievements for the review period</li>
-                <li>Development areas and action items</li>
-              </ul>
-              <p>We encourage you to review the feedback carefully and schedule a follow-up discussion with your manager if you have any questions.</p>
-            </div>
-            <div class="footer">
-              <p>This is an automated message from the HR Management System.</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    const text = `
-Performance Review Completed
-
-Hello ${employeeName},
-
-Your manager, ${reviewerName}, has completed your performance review.
-
-Review Period:
-From: ${formattedStartDate}
-To: ${formattedEndDate}
-
-Overall Rating: ${rating}/5
-
-Your complete performance review, including detailed feedback and comments, is now available in your account.
-
-Please log in to view:
-- Detailed feedback from your manager
-- Your self-assessment and manager's review side-by-side
-- Goals and achievements for the review period
-- Development areas and action items
-
-We encourage you to review the feedback carefully and schedule a follow-up discussion with your manager if you have any questions.
-
----
-This is an automated message from the HR Management System.
-    `;
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #FF9800; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background-color: #f9f9f9; }
+    .appraisal-details { background-color: #fff; padding: 15px; border-left: 4px solid #FF9800; margin: 20px 0; }
+    .button { display: inline-block; padding: 10px 20px; background-color: #FF9800; color: white; text-decoration: none; border-radius: 4px; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Appraisal ${appraisalData.status}</h1>
+    </div>
+    <div class="content">
+      <p>Hello ${appraisalData.employeeName},</p>
+      <p>Your appraisal for ${appraisalData.period} has been ${appraisalData.status.toLowerCase()}.</p>
+      
+      <div class="appraisal-details">
+        <p><strong>Period:</strong> ${appraisalData.period}</p>
+        <p><strong>Status:</strong> ${appraisalData.status}</p>
+        ${appraisalData.dueDate ? `<p><strong>Due Date:</strong> ${appraisalData.dueDate.toLocaleDateString()}</p>` : ''}
+      </div>
+      
+      <p style="text-align: center; margin-top: 30px;">
+        <a href="${appraisalData.dashboardUrl}" class="button">View Appraisal</a>
+      </p>
+    </div>
+    <div class="footer">
+      <p>This is an automated message. Please do not reply to this email.</p>
+      <p>&copy; ${new Date().getFullYear()} HR Management System. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
 
     return this.sendEmail({
-      to: employeeEmail,
-      subject: 'Your Performance Review is Complete',
-      html,
+      to: recipient,
+      subject,
       text,
+      html,
     });
   }
 
   /**
-   * Validate email options
+   * Send leave request notification to manager
    * 
-   * @private
-   * @param {EmailOptions} options - Email options to validate
-   * @returns {string | null} Error message if invalid, null if valid
+   * Notifies manager when an employee submits a leave request.
+   * 
+   * @param {EmailRecipient} recipient - Manager email recipient
+   * @param {LeaveRequestData} leaveData - Leave request data
+   * @returns {Promise<EmailSendResult>} Send result
    */
-  private validateEmailOptions(options: EmailOptions): string | null {
-    // Validate recipient email
-    if (!options.to || options.to.trim().length === 0) {
-      return 'Recipient email address is required';
-    }
+  async sendLeaveRequestNotification(
+    recipient: EmailRecipient,
+    leaveData: LeaveRequestData
+  ): Promise<EmailSendResult> {
+    const subject = `Leave Request from ${leaveData.employeeName}`;
+    const text = `
+Hello ${leaveData.managerName},
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(options.to)) {
-      return `Invalid recipient email address: ${options.to}`;
-    }
+${leaveData.employeeName} has submitted a leave request that requires your approval.
 
-    // Validate subject
-    if (!options.subject || options.subject.trim().length === 0) {
-      return 'Email subject is required';
-    }
+Leave Details:
+Type: ${leaveData.leaveType}
+Start Date: ${leaveData.startDate.toLocaleDateString()}
+End Date: ${leaveData.endDate.toLocaleDateString()}
+Duration: ${leaveData.days} day(s)
+Reason: ${leaveData.reason}
 
-    if (options.subject.length > 200) {
-      return 'Email subject must be 200 characters or less';
-    }
+Please review and approve or reject this request.
 
-    // Validate that at least one body is provided
-    if (!options.text && !options.html) {
-      return 'Either text or html body must be provided';
-    }
+Review request: ${leaveData.dashboardUrl}
 
-    // Validate text body length if provided
-    if (options.text && options.text.length > 50000) {
-      return 'Text body must be 50000 characters or less';
-    }
+Best regards,
+HR System
+    `.trim();
 
-    // Validate HTML body length if provided
-    if (options.html && options.html.length > 100000) {
-      return 'HTML body must be 100000 characters or less';
-    }
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #3F51B5; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background-color: #f9f9f9; }
+    .leave-details { background-color: #fff; padding: 15px; border-left: 4px solid #3F51B5; margin: 20px 0; }
+    .button { display: inline-block; padding: 10px 20px; background-color: #3F51B5; color: white; text-decoration: none; border-radius: 4px; margin: 5px; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Leave Request Pending Approval</h1>
+    </div>
+    <div class="content">
+      <p>Hello ${leaveData.managerName},</p>
+      <p><strong>${leaveData.employeeName}</strong> has submitted a leave request that requires your approval.</p>
+      
+      <div class="leave-details">
+        <h3>Leave Details</h3>
+        <p><strong>Type:</strong> ${leaveData.leaveType}</p>
+        <p><strong>Start Date:</strong> ${leaveData.startDate.toLocaleDateString()}</p>
+        <p><strong>End Date:</strong> ${leaveData.endDate.toLocaleDateString()}</p>
+        <p><strong>Duration:</strong> ${leaveData.days} day(s)</p>
+        <p><strong>Reason:</strong> ${leaveData.reason}</p>
+      </div>
+      
+      <p>Please review and approve or reject this request at your earliest convenience.</p>
+      
+      <p style="text-align: center; margin-top: 30px;">
+        <a href="${leaveData.dashboardUrl}" class="button">Review Request</a>
+      </p>
+    </div>
+    <div class="footer">
+      <p>This is an automated message. Please do not reply to this email.</p>
+      <p>&copy; ${new Date().getFullYear()} HR Management System. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
 
-    // Validate CC emails if provided
-    if (options.cc) {
-      const ccEmails = Array.isArray(options.cc) ? options.cc : [options.cc];
-      for (const email of ccEmails) {
-        if (!emailRegex.test(email)) {
-          return `Invalid CC email address: ${email}`;
-        }
-      }
-    }
-
-    // Validate BCC emails if provided
-    if (options.bcc) {
-      const bccEmails = Array.isArray(options.bcc) ? options.bcc : [options.bcc];
-      for (const email of bccEmails) {
-        if (!emailRegex.test(email)) {
-          return `Invalid BCC email address: ${email}`;
-        }
-      }
-    }
-
-    // Validate reply-to email if provided
-    if (options.replyTo && !emailRegex.test(options.replyTo)) {
-      return `Invalid reply-to email address: ${options.replyTo}`;
-    }
-
-    return null;
+    return this.sendEmail({
+      to: recipient,
+      subject,
+      text,
+      html,
+    });
   }
 
   /**
-   * Verify SMTP connection
+   * Send leave approval notification to employee
+   * 
+   * Notifies employee when their leave request has been approved.
+   * 
+   * @param {EmailRecipient} recipient - Employee email recipient
+   * @param {LeaveApprovalData} leaveData - Leave approval data
+   * @returns {Promise<EmailSendResult>} Send result
+   */
+  async sendLeaveApprovalNotification(
+    recipient: EmailRecipient,
+    leaveData: LeaveApprovalData
+  ): Promise<EmailSendResult> {
+    const subject = `Leave Request Approved`;
+    const text = `
+Hello ${leaveData.employeeName},
+
+Good news! Your leave request has been approved by ${leaveData.managerName}.
+
+Leave Details:
+Type: ${leaveData.leaveType}
+Start Date: ${leaveData.startDate.toLocaleDateString()}
+End Date: ${leaveData.endDate.toLocaleDateString()}
+Duration: ${leaveData.days} day(s)
+
+Your leave balance has been updated accordingly.
+
+View your leave history: ${leaveData.dashboardUrl}
+
+Best regards,
+HR System
+    `.trim();
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #4CAF50; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background-color: #f9f9f9; }
+    .leave-details { background-color: #fff; padding: 15px; border-left: 4px solid #4CAF50; margin: 20px 0; }
+    .success-badge { background-color: #4CAF50; color: white; padding: 5px 10px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
+    .button { display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 4px; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>✓ Leave Request Approved</h1>
+    </div>
+    <div class="content">
+      <p>Hello ${leaveData.employeeName},</p>
+      <p><span class="success-badge">APPROVED</span></p>
+      <p>Good news! Your leave request has been approved by <strong>${leaveData.managerName}</strong>.</p>
+      
+      <div class="leave-details">
+        <h3>Approved Leave Details</h3>
+        <p><strong>Type:</strong> ${leaveData.leaveType}</p>
+        <p><strong>Start Date:</strong> ${leaveData.startDate.toLocaleDateString()}</p>
+        <p><strong>End Date:</strong> ${leaveData.endDate.toLocaleDateString()}</p>
+        <p><strong>Duration:</strong> ${leaveData.days} day(s)</p>
+      </div>
+      
+      <p>Your leave balance has been updated accordingly. Enjoy your time off!</p>
+      
+      <p style="text-align: center; margin-top: 30px;">
+        <a href="${leaveData.dashboardUrl}" class="button">View Leave History</a>
+      </p>
+    </div>
+    <div class="footer">
+      <p>This is an automated message. Please do not reply to this email.</p>
+      <p>&copy; ${new Date().getFullYear()} HR Management System. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    return this.sendEmail({
+      to: recipient,
+      subject,
+      text,
+      html,
+    });
+  }
+
+  /**
+   * Send leave rejection notification to employee
+   * 
+   * Notifies employee when their leave request has been rejected.
+   * 
+   * @param {EmailRecipient} recipient - Employee email recipient
+   * @param {LeaveRejectionData} leaveData - Leave rejection data
+   * @returns {Promise<EmailSendResult>} Send result
+   */
+  async sendLeaveRejectionNotification(
+    recipient: EmailRecipient,
+    leaveData: LeaveRejectionData
+  ): Promise<EmailSendResult> {
+    const subject = `Leave Request Not Approved`;
+    const text = `
+Hello ${leaveData.employeeName},
+
+Your leave request has not been approved by ${leaveData.managerName}.
+
+Leave Details:
+Type: ${leaveData.leaveType}
+Start Date: ${leaveData.startDate.toLocaleDateString()}
+End Date: ${leaveData.endDate.toLocaleDateString()}
+Duration: ${leaveData.days} day(s)
+
+Reason for rejection:
+${leaveData.rejectionReason}
+
+If you have questions about this decision, please contact your manager directly.
+
+View your leave history: ${leaveData.dashboardUrl}
+
+Best regards,
+HR System
+    `.trim();
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #f44336; color: white; padding: 20px; text-align: center; }
+    .content { padding: 20px; background-color: #f9f9f9; }
+    .leave-details { background-color: #fff; padding: 15px; border-left: 4px solid #f44336; margin: 20px 0; }
+    .rejection-reason { background-color: #ffebee; padding: 15px; border-radius: 4px; margin: 20px 0; }
+    .rejected-badge { background-color: #f44336; color: white; padding: 5px 10px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
+    .button { display: inline-block; padding: 10px 20px; background-color: #f44336; color: white; text-decoration: none; border-radius: 4px; }
+    .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Leave Request Not Approved</h1>
+    </div>
+    <div class="content">
+      <p>Hello ${leaveData.employeeName},</p>
+      <p><span class="rejected-badge">NOT APPROVED</span></p>
+      <p>Your leave request has not been approved by <strong>${leaveData.managerName}</strong>.</p>
+      
+      <div class="leave-details">
+        <h3>Leave Request Details</h3>
+        <p><strong>Type:</strong> ${leaveData.leaveType}</p>
+        <p><strong>Start Date:</strong> ${leaveData.startDate.toLocaleDateString()}</p>
+        <p><strong>End Date:</strong> ${leaveData.endDate.toLocaleDateString()}</p>
+        <p><strong>Duration:</strong> ${leaveData.days} day(s)</p>
+      </div>
+      
+      <div class="rejection-reason">
+        <h3>Reason for Rejection</h3>
+        <p>${leaveData.rejectionReason}</p>
+      </div>
+      
+      <p>If you have questions about this decision, please contact your manager directly.</p>
+      
+      <p style="text-align: center; margin-top: 30px;">
+        <a href="${leaveData.dashboardUrl}" class="button">View Leave History</a>
+      </p>
+    </div>
+    <div class="footer">
+      <p>This is an automated message. Please do not reply to this email.</p>
+      <p>&copy; ${new Date().getFullYear()} HR Management System. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    return this.sendEmail({
+      to: recipient,
+      subject,
+      text,
+      html,
+    });
+  }
+
+  /**
+   * Verify email service connection
    * 
    * @returns {Promise<boolean>} True if connection is successful
    */
   async verifyConnection(): Promise<boolean> {
-    if (!isEmailEnabled()) {
-      console.log('[EMAIL_SERVICE] Email service is disabled, skipping connection verification');
+    if (!this.config.enabled) {
+      console.log('[EMAIL_SERVICE] Email service is disabled, skipping verification');
+      return false;
+    }
+
+    if (!this.transporter) {
+      console.error('[EMAIL_SERVICE] Email transporter not initialized');
       return false;
     }
 
     try {
-      this.initializeTransporter();
-      console.log('[EMAIL_SERVICE] Verifying SMTP connection...');
-      await this.transporter!.verify();
-      console.log('[EMAIL_SERVICE] SMTP connection verified successfully');
+      console.log('[EMAIL_SERVICE] Verifying email service connection...');
+      await this.transporter.verify();
+      console.log('[EMAIL_SERVICE] Email service connection verified successfully');
       return true;
     } catch (error) {
-      console.error('[EMAIL_SERVICE] SMTP connection verification failed:', {
+      console.error('[EMAIL_SERVICE] Email service connection verification failed:', {
         error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
       });
       return false;
-    }
-  }
-
-  /**
-   * Close SMTP connection
-   */
-  async close(): Promise<void> {
-    if (this.transporter) {
-      console.log('[EMAIL_SERVICE] Closing SMTP connection...');
-      this.transporter.close();
-      this.transporter = null;
-      console.log('[EMAIL_SERVICE] SMTP connection closed');
     }
   }
 }
@@ -740,14 +1066,6 @@ let emailServiceInstance: EmailService | null = null;
  * Get email service singleton instance
  * 
  * @returns {EmailService} Email service instance
- * 
- * @example
- * const emailService = getEmailService();
- * await emailService.sendEmail({
- *   to: 'user@example.com',
- *   subject: 'Test',
- *   text: 'Test message',
- * });
  */
 export function getEmailService(): EmailService {
   if (!emailServiceInstance) {
@@ -759,13 +1077,12 @@ export function getEmailService(): EmailService {
 /**
  * Reset email service singleton
  * 
- * Useful for testing to force recreation of service instance.
+ * Forces service to be recreated on next call to getEmailService().
+ * Useful for testing.
  */
 export function resetEmailService(): void {
-  if (emailServiceInstance) {
-    emailServiceInstance.close();
-  }
   emailServiceInstance = null;
+  console.log('[EMAIL_SERVICE] Email service reset');
 }
 
 /**
