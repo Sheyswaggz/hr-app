@@ -93,12 +93,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.cache-node-modules.outputs.cache-hit != 'true'
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --prefer-offline --no-audit
-          else
-            npm install --prefer-offline --no-audit
-          fi
+        run: npm install --prefer-offline --no-audit
 
       - name: Verify installation
         run: |
@@ -196,7 +191,7 @@ jobs:
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
       - name: Run unit tests
-        run: npm run test -- --coverage tests/unit
+        run: npm run test -- --coverage --testPathPattern="tests/unit"
         env:
           NODE_ENV: test
 
@@ -267,7 +262,7 @@ jobs:
           NODE_ENV: test
 
       - name: Run integration tests
-        run: npm run test -- tests/integration
+        run: npm run test -- --testPathPattern="tests/integration"
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_app_test
           NODE_ENV: test
@@ -322,13 +317,6 @@ jobs:
             ~/.npm
           key: ${{ env.CACHE_VERSION }}-${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
 
-      - name: Wait for PostgreSQL
-        run: |
-          until pg_isready -h localhost -p 5432 -U postgres; do
-            echo "Waiting for PostgreSQL..."
-            sleep 2
-          done
-
       - name: Run database migrations
         run: npm run migrate:up
         env:
@@ -336,7 +324,7 @@ jobs:
           NODE_ENV: test
 
       - name: Run E2E tests
-        run: npm run test -- tests/e2e
+        run: npm run test -- --testPathPattern="tests/e2e"
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_app_test
           NODE_ENV: test
@@ -464,13 +452,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: Ensure package-lock.json exists
-        run: |
-          if [ ! -f package-lock.json ]; then
-            echo "::notice::package-lock.json not found, generating it..."
-            npm install --package-lock-only --prefer-offline --no-audit
-          fi
 
       - name: Run npm audit
         run: |
