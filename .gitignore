@@ -154,3 +154,5 @@ uploads/
 *.db
 *.sqlite
 *.sqlite3
+src/config/swagger.ts
+package-lock.json

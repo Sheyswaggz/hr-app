@@ -723,3 +723,6 @@ export class AppraisalController {
     return csvRows.join('\n');
   }
 }
+
+// Export an instance of the controller
+export const appraisalController = new AppraisalController();

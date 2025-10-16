@@ -125,6 +125,25 @@ function loadEmailConfig(): EmailConfig {
 
   const environment = (process.env.NODE_ENV || 'development') as EmailConfig['environment'];
 
+  // Email service can be disabled via environment variable
+  const enabled = process.env.EMAIL_ENABLED !== 'false';
+
+  // If email is disabled, return minimal config with default values
+  if (!enabled) {
+    console.log('[EMAIL_CONFIG] Email service is disabled (EMAIL_ENABLED=false)');
+    return {
+      host: 'localhost',
+      port: 587,
+      secure: false,
+      from: 'noreply@example.com',
+      connectionTimeout: 10000,
+      socketTimeout: 10000,
+      maxRetries: 3,
+      enabled: false,
+      environment,
+    };
+  }
+
   // Load SMTP host (required)
   const host = process.env.SMTP_HOST;
   if (!host || host.trim().length === 0) {
@@ -191,9 +210,6 @@ function loadEmailConfig(): EmailConfig {
   const socketTimeout = parseInt(process.env.EMAIL_SOCKET_TIMEOUT || '10000', 10);
   const maxRetries = parseInt(process.env.EMAIL_MAX_RETRIES || '3', 10);
 
-  // Email service can be disabled via environment variable
-  const enabled = process.env.EMAIL_ENABLED !== 'false';
-
   const config: EmailConfig = {
     host: host.trim(),
     port,
@@ -203,7 +219,7 @@ function loadEmailConfig(): EmailConfig {
     connectionTimeout,
     socketTimeout,
     maxRetries,
-    enabled,
+    enabled: true,
     environment,
   };
 
