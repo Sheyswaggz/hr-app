@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "test": "vitest",
     "test:db": "vitest --config vitest.config.db.ts",
+    "test:leave": "vitest --run tests/unit/services/leave.service.test.ts tests/integration/leave.api.test.ts tests/e2e/leave.flow.test.ts",
     "test:coverage": "vitest --coverage",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -31,6 +32,7 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
+    "date-fns": "^3.0.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-validator": "^7.2.1",
