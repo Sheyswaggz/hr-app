@@ -1,107 +1,140 @@
 # Authorization Matrix
 
-This document defines the role-based access control (RBAC) matrix for the HR Management Application. It specifies which roles can access which endpoints and what operations they can perform.
+This document defines the authorization rules for all API endpoints in the HR Management Application. It specifies which user roles can access which endpoints and what data access restrictions apply.
 
 ## Role Hierarchy
 
-- **HR_ADMIN**: Highest privilege level, full system access
-- **MANAGER**: Mid-level privilege, can manage team members
-- **EMPLOYEE**: Base privilege level, can access own resources
+The application uses a three-tier role hierarchy:
 
-## Authentication Endpoints
+1. **HR_ADMIN** (highest privilege)
+   - Full access to all system features
+   - Can manage all users, employees, and organizational data
+   - Can override most business rules when necessary
 
-| Endpoint | Method | HR_ADMIN | MANAGER | EMPLOYEE | Notes |
-|----------|--------|----------|---------|----------|-------|
-| `/api/auth/register` | POST | ✅ | ❌ | ❌ | HR Admin can create new users |
-| `/api/auth/login` | POST | ✅ | ✅ | ✅ | Public endpoint for all users |
-| `/api/auth/logout` | POST | ✅ | ✅ | ✅ | Authenticated users can logout |
-| `/api/auth/me` | GET | ✅ | ✅ | ✅ | Get current user profile |
-| `/api/auth/refresh` | POST | ✅ | ✅ | ✅ | Refresh authentication token |
+2. **MANAGER** (middle privilege)
+   - Can manage their direct reports
+   - Can approve/reject requests from team members
+   - Can view team-level reports and analytics
 
-## Onboarding Endpoints
+3. **EMPLOYEE** (base privilege)
+   - Can manage their own data
+   - Can submit requests requiring approval
+   - Can view their own records and history
 
-| Endpoint | Method | HR_ADMIN | MANAGER | EMPLOYEE | Notes |
-|----------|--------|----------|---------|----------|-------|
-| `/api/onboarding/tasks` | GET | ✅ | ✅ | ✅ | Employees see own tasks, Managers see team tasks, HR sees all |
-| `/api/onboarding/tasks` | POST | ✅ | ✅ | ❌ | Create onboarding task for team member |
-| `/api/onboarding/tasks/:id` | GET | ✅ | ✅ | ✅ | View specific task (with ownership rules) |
-| `/api/onboarding/tasks/:id` | PATCH | ✅ | ✅ | ✅ | Update task (employees can update own tasks) |
-| `/api/onboarding/tasks/:id` | DELETE | ✅ | ✅ | ❌ | Delete onboarding task |
-| `/api/onboarding/tasks/:id/complete` | POST | ✅ | ✅ | ✅ | Mark task as complete (employees can complete own tasks) |
-| `/api/onboarding/templates` | GET | ✅ | ✅ | ❌ | View onboarding templates |
-| `/api/onboarding/templates` | POST | ✅ | ❌ | ❌ | Create onboarding template |
-| `/api/onboarding/templates/:id` | GET | ✅ | ✅ | ❌ | View specific template |
-| `/api/onboarding/templates/:id` | PATCH | ✅ | ❌ | ❌ | Update template |
-| `/api/onboarding/templates/:id` | DELETE | ✅ | ❌ | ❌ | Delete template |
+## Authorization Rules
 
-## Appraisal Endpoints
+### Authentication Endpoints
 
-| Endpoint | Method | HR_ADMIN | MANAGER | EMPLOYEE | Notes |
-|----------|--------|----------|---------|----------|-------|
-| `/api/appraisals` | POST | ❌ | ✅ | ❌ | Manager initiates appraisal cycle for team members |
-| `/api/appraisals/:id` | GET | ✅ | ✅ (team only) | ✅ (own only) | Employee can view own appraisals, Manager can view team appraisals, HR Admin can view all |
-| `/api/appraisals/my-appraisals` | GET | ❌ | ❌ | ✅ | Employee views their appraisal history |
-| `/api/appraisals/team` | GET | ❌ | ✅ | ❌ | Manager views team appraisals |
-| `/api/appraisals` | GET | ✅ | ❌ | ❌ | HR Admin views all appraisals |
-| `/api/appraisals/:id/self-assessment` | PATCH | ❌ | ❌ | ✅ (own only) | Employee submits self-assessment for own appraisal |
-| `/api/appraisals/:id/review` | PATCH | ❌ | ✅ (team only) | ❌ | Manager submits review feedback and rating for team member |
-| `/api/appraisals/:id/goals` | PATCH | ✅ | ✅ (team only) | ✅ (own only) | Manager or Employee can update goals based on ownership |
+| Endpoint | Method | Allowed Roles | Data Access Rules |
+|----------|--------|---------------|-------------------|
+| `/api/auth/register` | POST | Public | N/A |
+| `/api/auth/login` | POST | Public | N/A |
+| `/api/auth/logout` | POST | Authenticated | N/A |
+| `/api/auth/refresh` | POST | Authenticated | N/A |
+| `/api/auth/me` | GET | Authenticated | Own profile only |
+
+### User Management Endpoints
+
+| Endpoint | Method | Allowed Roles | Data Access Rules |
+|----------|--------|---------------|-------------------|
+| `/api/users` | GET | HR_ADMIN | All users |
+| `/api/users/:id` | GET | HR_ADMIN, Owner | HR_ADMIN: all users; Owner: own profile only |
+| `/api/users` | POST | HR_ADMIN | N/A |
+| `/api/users/:id` | PATCH | HR_ADMIN, Owner | HR_ADMIN: all users; Owner: own profile only (limited fields) |
+| `/api/users/:id` | DELETE | HR_ADMIN | All users |
+
+### Employee Management Endpoints
+
+| Endpoint | Method | Allowed Roles | Data Access Rules |
+|----------|--------|---------------|-------------------|
+| `/api/employees` | GET | HR_ADMIN, MANAGER | HR_ADMIN: all employees; MANAGER: team members only |
+| `/api/employees/:id` | GET | HR_ADMIN, MANAGER, Owner | HR_ADMIN: all employees; MANAGER: team members; Owner: own record |
+| `/api/employees` | POST | HR_ADMIN | N/A |
+| `/api/employees/:id` | PATCH | HR_ADMIN | All employees |
+| `/api/employees/:id` | DELETE | HR_ADMIN | All employees |
+
+### Onboarding Endpoints
+
+| Endpoint | Method | Allowed Roles | Data Access Rules |
+|----------|--------|---------------|-------------------|
+| `/api/onboarding/templates` | GET | HR_ADMIN, MANAGER | All templates |
+| `/api/onboarding/templates/:id` | GET | HR_ADMIN, MANAGER | All templates |
+| `/api/onboarding/templates` | POST | HR_ADMIN | N/A |
+| `/api/onboarding/templates/:id` | PATCH | HR_ADMIN | All templates |
+| `/api/onboarding/templates/:id` | DELETE | HR_ADMIN | All templates |
+| `/api/onboarding/workflows` | POST | HR_ADMIN, MANAGER | N/A |
+| `/api/onboarding/workflows/:id` | GET | HR_ADMIN, MANAGER, Assignee | HR_ADMIN/MANAGER: all workflows; Assignee: assigned workflows only |
+| `/api/onboarding/my-tasks` | GET | EMPLOYEE | Own tasks only |
+| `/api/onboarding/tasks/:id` | GET | HR_ADMIN, MANAGER, Assignee | HR_ADMIN/MANAGER: all tasks; Assignee: assigned tasks only |
+| `/api/onboarding/tasks/:id` | PATCH | HR_ADMIN, MANAGER, Assignee | HR_ADMIN/MANAGER: all tasks; Assignee: can only update status/notes |
+| `/api/onboarding/team-progress` | GET | MANAGER | Team members only |
+
+### Appraisal Endpoints
+
+| Endpoint | Method | Allowed Roles | Data Access Rules |
+|----------|--------|---------------|-------------------|
+| `/api/appraisals` | GET | HR_ADMIN, MANAGER | HR_ADMIN: all appraisals; MANAGER: team appraisals only |
+| `/api/appraisals/:id` | GET | HR_ADMIN, MANAGER, Owner | HR_ADMIN: all; MANAGER: team only; Owner: own appraisal |
+| `/api/appraisals` | POST | HR_ADMIN, MANAGER | Can create for team members only |
+| `/api/appraisals/:id/self-assessment` | PATCH | Owner | Own appraisal only |
+| `/api/appraisals/:id/manager-review` | PATCH | MANAGER | Team member appraisals only |
+| `/api/appraisals/:id/submit` | PATCH | Owner, MANAGER | Owner: submit self-assessment; MANAGER: submit review |
+| `/api/appraisals/my-appraisals` | GET | EMPLOYEE | Own appraisals only |
+
+### Leave Management Endpoints
+
+| Endpoint | Method | Allowed Roles | Data Access Rules |
+|----------|--------|---------------|-------------------|
+| `/api/leave/requests` | POST | EMPLOYEE | N/A |
+| `/api/leave/requests/:id` | GET | EMPLOYEE, MANAGER | EMPLOYEE: own requests only; MANAGER: team requests only |
+| `/api/leave/my-requests` | GET | EMPLOYEE | Own requests only |
+| `/api/leave/team-requests` | GET | MANAGER | Team member requests only |
+| `/api/leave/requests/:id/approve` | PATCH | MANAGER | Team member requests only |
+| `/api/leave/requests/:id/reject` | PATCH | MANAGER | Team member requests only |
+| `/api/leave/my-balance` | GET | EMPLOYEE | Own balance only |
 
 ## Data Access Rules
 
-### Onboarding Tasks
-- **Employees**: Can only view and update their own onboarding tasks
-- **Managers**: Can view and manage tasks for their direct reports
-- **HR Admins**: Can view and manage all onboarding tasks across the organization
+### Employee Data Access
 
-### Onboarding Templates
-- **Employees**: No access to templates
-- **Managers**: Can view templates to understand onboarding workflows
-- **HR Admins**: Full CRUD access to templates
+- **HR_ADMIN**: Can access all employee records without restriction
+- **MANAGER**: Can only access records of direct reports (employees where manager_id matches the manager's user_id)
+- **EMPLOYEE**: Can only access their own employee record
 
-### Appraisals
-- **Employees**: Can only access their own appraisals, submit self-assessments, and update their own goals
-- **Managers**: Can only initiate appraisal cycles for and review team members they directly supervise, can update goals for team members
-- **HR Admins**: Can view all appraisals across the organization for reporting and oversight purposes
+### Leave Request Access
+
+- **EMPLOYEE**: Can only view and create their own leave requests
+- **MANAGER**: Can view and approve/reject leave requests from team members (employees where manager_id matches the manager's user_id)
+- **HR_ADMIN**: Can view all leave requests (read-only, cannot approve/reject)
+
+### Leave Balance Access
+
+- **EMPLOYEE**: Can only view their own leave balance
+- **MANAGER**: Can view leave balances of team members
+- **HR_ADMIN**: Can view all leave balances
+
+### Appraisal Access
+
+- **EMPLOYEE**: Can view and submit self-assessments for their own appraisals
+- **MANAGER**: Can view, create, and submit reviews for team member appraisals
+- **HR_ADMIN**: Can view all appraisals and override any restrictions
+
+### Onboarding Task Access
+
+- **EMPLOYEE**: Can view and update tasks assigned to them
+- **MANAGER**: Can view and manage all tasks for team members
+- **HR_ADMIN**: Can view and manage all onboarding tasks
 
 ## Authorization Implementation
 
-The authorization is implemented using middleware in `src/middleware/authorize.ts`:
+### Middleware Chain
 
-- `authorize(roles)`: Generic authorization middleware that checks if user has one of the specified roles
-- `requireHRAdmin`: Shorthand for HR Admin only access
-- `requireManager`: Shorthand for Manager or HR Admin access (using hierarchy)
-- `requireEmployee`: Shorthand for any authenticated user
-- `createOwnerOrElevatedMiddleware`: Custom middleware for resource ownership checks
+All protected endpoints use the following middleware chain:
 
-## Special Authorization Cases
+1. `authenticate` - Verifies JWT token and attaches user to request
+2. `authorize([roles])` - Checks if user has required role
+3. Route handler - Implements business logic with data access checks
 
-### Resource Ownership
-Some endpoints require additional ownership checks beyond role-based access:
+### Data Access Validation
 
-1. **Own Resource Access**: Employees can access their own resources (tasks, appraisals)
-2. **Team Resource Access**: Managers can access resources for their direct reports
-3. **Elevated Access**: HR Admins can access all resources regardless of ownership
-
-### Appraisal Workflow Authorization
-The appraisal system enforces specific workflow-based authorization:
-
-1. **Cycle Initiation**: Only Managers can initiate appraisal cycles for their team members
-2. **Self-Assessment**: Only the Employee being appraised can submit self-assessment
-3. **Manager Review**: Only the assigned Manager can submit review and rating
-4. **Goal Management**: Both Manager and Employee can update goals based on ownership context
-5. **Status Transitions**: Enforced through state machine validation (draft → submitted → completed)
-
-## Security Considerations
-
-1. **Authentication Required**: All endpoints except `/api/auth/login` and `/api/auth/register` require valid JWT authentication
-2. **Role Validation**: Roles are validated against the user's JWT token claims
-3. **Resource Ownership**: Additional checks ensure users can only access resources they own or manage
-4. **Audit Logging**: All authorization attempts (success and failure) are logged with correlation IDs
-5. **Input Validation**: All inputs are validated before authorization checks to prevent injection attacks
-6. **SQL Injection Prevention**: Parameterized queries used throughout to prevent SQL injection
-7. **Data Isolation**: Database queries include role-based filtering to ensure data isolation
-
-## Error Responses
-
-Authorization failures return standardized error responses:
+In addition to role-based authorization, route handlers must implement data access validation:
