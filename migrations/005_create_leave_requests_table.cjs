@@ -2,7 +2,7 @@ exports.up = (pgm) => {
   pgm.createTable('leave_requests', {
     id: 'id',
     employee_id: {
-      type: 'integer',
+      type: 'uuid',
       notNull: true,
       references: '"employees"',
       onDelete: 'CASCADE',
@@ -32,7 +32,7 @@ exports.up = (pgm) => {
       default: "'pending'",
     },
     reviewed_by: {
-      type: 'integer',
+      type: 'uuid',
       references: '"users"',
       onDelete: 'SET NULL',
     },

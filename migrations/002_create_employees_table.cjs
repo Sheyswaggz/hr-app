@@ -1,8 +1,12 @@
 exports.up = (pgm) => {
   pgm.createTable('employees', {
-    id: 'id',
+    id: { 
+      type: 'uuid', 
+      primaryKey: true, 
+      default: pgm.func('uuid_generate_v4()') 
+    },
     user_id: {
-      type: 'integer',
+      type: 'uuid',
       notNull: true,
       references: '"users"',
       onDelete: 'CASCADE',
@@ -13,7 +17,7 @@ exports.up = (pgm) => {
     position: { type: 'varchar(100)' },
     hire_date: { type: 'date' },
     manager_id: {
-      type: 'integer',
+      type: 'uuid',
       references: '"employees"',
       onDelete: 'SET NULL',
     },

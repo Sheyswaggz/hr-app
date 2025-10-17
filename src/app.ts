@@ -6,7 +6,7 @@ import { authRouter } from './routes/auth.routes.js';
 import { onboardingRouter } from './routes/onboarding.routes.js';
 import { appraisalRouter } from './routes/appraisal.routes.js';
 import { leaveRouter } from './routes/leave.routes.js';
-import { swaggerSpec } from './config/swagger.js';
+import { swaggerSpec } from './config/swagger';
 
 /**
  * Create and configure Express application
