@@ -1,6 +1,13 @@
 exports.up = (pgm) => {
+  // Enable UUID extension
+  pgm.createExtension('uuid-ossp', { ifNotExists: true });
+  
   pgm.createTable('users', {
-    id: 'id',
+    id: { 
+      type: 'uuid', 
+      primaryKey: true, 
+      default: pgm.func('uuid_generate_v4()') 
+    },
     email: { type: 'varchar(255)', notNull: true, unique: true },
     password_hash: { type: 'varchar(255)', notNull: true },
     first_name: { type: 'varchar(100)', notNull: true },

@@ -2,13 +2,13 @@ exports.up = (pgm) => {
   pgm.createTable('appraisals', {
     id: 'id',
     employee_id: {
-      type: 'integer',
+      type: 'uuid',
       notNull: true,
       references: '"employees"',
       onDelete: 'CASCADE',
     },
     reviewer_id: {
-      type: 'integer',
+      type: 'uuid',
       notNull: true,
       references: '"users"',
       onDelete: 'CASCADE',

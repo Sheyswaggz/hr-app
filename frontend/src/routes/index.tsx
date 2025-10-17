@@ -10,9 +10,9 @@ import { UserRole } from '../contexts/AuthContext';
  */
 const LoginPage = lazy(() => import('../pages/LoginPage'));
 const DashboardLayout = lazy(() => import('../layouts/DashboardLayout'));
-const HRAdminDashboard = lazy(() => import('../pages/HRAdminDashboard'));
-const ManagerDashboard = lazy(() => import('../pages/ManagerDashboard'));
-const EmployeeDashboard = lazy(() => import('../pages/EmployeeDashboard'));
+const HRAdminDashboard = lazy(() => import('../pages/dashboards/HRAdminDashboard'));
+const ManagerDashboard = lazy(() => import('../pages/dashboards/ManagerDashboard'));
+const EmployeeDashboard = lazy(() => import('../pages/dashboards/EmployeeDashboard'));
 
 /**
  * Loading fallback component displayed during lazy component loading

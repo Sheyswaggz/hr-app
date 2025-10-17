@@ -3,7 +3,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthProvider } from './contexts/AuthContext';
-import { Routes } from './routes';
+import { AppRoutes } from './routes';
 
 /**
  * Custom Material-UI theme configuration
@@ -234,7 +234,7 @@ const App: React.FC = () => {
       <ErrorBoundary>
         <AuthProvider>
           <BrowserRouter>
-            <Routes />
+            <AppRoutes />
           </BrowserRouter>
         </AuthProvider>
       </ErrorBoundary>

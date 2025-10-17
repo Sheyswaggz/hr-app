@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
 
 /**
  * User role enumeration matching backend UserRole
@@ -36,9 +37,12 @@ interface TokenPayload {
  * Login response from backend API
  */
 interface LoginResponse {
+  success: boolean;
+  tokens: {
+    accessToken: string;
+    refreshToken: string;
+  };
   user: User;
-  accessToken: string;
-  refreshToken: string;
 }
 
 /**
@@ -304,17 +308,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const data: LoginResponse = await response.json();
       
-      if (!data.accessToken || !data.refreshToken || !data.user) {
+      if (!data.tokens?.accessToken || !data.tokens?.refreshToken || !data.user) {
         console.error('[AuthContext] Invalid login response:', {
-          hasAccessToken: !!data.accessToken,
-          hasRefreshToken: !!data.refreshToken,
+          hasTokens: !!data.tokens,
+          hasAccessToken: !!data.tokens?.accessToken,
+          hasRefreshToken: !!data.tokens?.refreshToken,
           hasUser: !!data.user,
         });
         throw new Error('Invalid response from server');
       }
 
-      localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.accessToken);
-      localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.refreshToken);
+      localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.tokens.accessToken);
+      localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.tokens.refreshToken);
       
       setUser(data.user);
       

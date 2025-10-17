@@ -2,7 +2,7 @@ exports.up = (pgm) => {
   pgm.createTable('leave_balances', {
     id: 'id',
     employee_id: {
-      type: 'integer',
+      type: 'uuid',
       notNull: true,
       references: '"employees"',
       onDelete: 'CASCADE',
