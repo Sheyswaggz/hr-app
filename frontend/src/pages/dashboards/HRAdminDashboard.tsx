@@ -1,379 +1,255 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Box,
+  Container,
+  Grid,
+  Paper,
+  Typography,
   Card,
   CardContent,
-  Grid,
-  Typography,
   Button,
-  useTheme,
-  useMediaQuery,
-  Stack,
   Divider,
-  alpha,
 } from '@mui/material';
 import {
   People as PeopleIcon,
   Assignment as AssignmentIcon,
-  Assessment as AssessmentIcon,
-  EventNote as EventNoteIcon,
+  CheckCircle as CheckCircleIcon,
   Add as AddIcon,
-  TrendingUp as TrendingUpIcon,
+  PersonAdd as PersonAddIcon,
 } from '@mui/icons-material';
-
-/**
- * Metric card data structure
- */
-interface MetricCardData {
-  title: string;
-  value: number;
-  icon: React.ReactElement;
-  color: string;
-  trend?: {
-    value: number;
-    isPositive: boolean;
-  };
-}
-
-/**
- * Quick action button configuration
- */
-interface QuickAction {
-  label: string;
-  icon: React.ReactElement;
-  onClick: () => void;
-  color: 'primary' | 'secondary' | 'success' | 'error' | 'info' | 'warning';
-}
+import { TemplateList } from '../../components/onboarding/TemplateList';
+import { TemplateForm } from '../../components/onboarding/TemplateForm';
+import { WorkflowAssignment } from '../../components/onboarding/WorkflowAssignment';
+import { useOnboardingTemplates } from '../../hooks/useOnboardingTemplates';
 
 /**
  * HR Admin Dashboard Component
  * 
- * Provides comprehensive overview for HR administrators with:
- * - Key metrics cards (total employees, pending onboarding, pending appraisals, pending leave requests)
- * - Quick action buttons for common HR tasks
- * - Responsive grid layout (12 columns desktop, 6 tablet, 12 mobile)
- * - Material-UI themed components
- * 
- * @component
- * @example
- * ```tsx
- * <Route path="/dashboard" element={<HRAdminDashboard />} />
- * ```
+ * Main dashboard for HR administrators with comprehensive management capabilities.
+ * Includes employee metrics, leave management, appraisal tracking, and onboarding workflow management.
  */
-export const HRAdminDashboard: React.FC = () => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+const HRAdminDashboard: React.FC = () => {
+  // Onboarding state management
+  const { createTemplate, updateTemplate } = useOnboardingTemplates();
+  const [templateFormOpen, setTemplateFormOpen] = useState(false);
+  const [templateFormMode, setTemplateFormMode] = useState<'create' | 'edit'>('create');
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [workflowAssignmentOpen, setWorkflowAssignmentOpen] = useState(false);
 
-  /**
-   * Handles navigation to create onboarding workflow
-   */
-  const handleCreateOnboarding = (): void => {
-    console.log('[HRAdminDashboard] Create onboarding action triggered');
-    // TODO: Navigate to onboarding creation page
-    // navigate('/onboarding/create');
+  // Mock data for existing metrics
+  const metrics = {
+    totalEmployees: 150,
+    activeLeaveRequests: 12,
+    pendingAppraisals: 8,
+    pendingOnboarding: 5,
   };
 
-  /**
-   * Handles navigation to create appraisal
-   */
-  const handleCreateAppraisal = (): void => {
-    console.log('[HRAdminDashboard] Create appraisal action triggered');
-    // TODO: Navigate to appraisal creation page
-    // navigate('/appraisals/create');
-  };
-
-  /**
-   * Handles navigation to employees list
-   */
-  const handleViewEmployees = (): void => {
-    console.log('[HRAdminDashboard] View employees action triggered');
-    // TODO: Navigate to employees page
-    // navigate('/employees');
-  };
-
-  /**
-   * Handles navigation to pending leave requests
-   */
-  const handleViewLeaveRequests = (): void => {
-    console.log('[HRAdminDashboard] View leave requests action triggered');
-    // TODO: Navigate to leave requests page
-    // navigate('/leave');
-  };
-
-  /**
-   * Metric cards configuration
-   * In production, these values would come from API calls
-   */
-  const metrics: MetricCardData[] = [
+  // Mock employees data for workflow assignment
+  const mockEmployees = [
     {
-      title: 'Total Employees',
-      value: 247,
-      icon: <PeopleIcon sx={{ fontSize: 40 }} />,
-      color: theme.palette.primary.main,
-      trend: {
-        value: 12,
-        isPositive: true,
-      },
+      id: '1',
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john.doe@example.com',
+      department: 'Engineering',
+      position: 'Software Engineer',
     },
     {
-      title: 'Pending Onboarding',
-      value: 8,
-      icon: <AssignmentIcon sx={{ fontSize: 40 }} />,
-      color: theme.palette.warning.main,
-      trend: {
-        value: 3,
-        isPositive: false,
-      },
-    },
-    {
-      title: 'Pending Appraisals',
-      value: 15,
-      icon: <AssessmentIcon sx={{ fontSize: 40 }} />,
-      color: theme.palette.info.main,
-      trend: {
-        value: 5,
-        isPositive: true,
-      },
-    },
-    {
-      title: 'Pending Leave Requests',
-      value: 12,
-      icon: <EventNoteIcon sx={{ fontSize: 40 }} />,
-      color: theme.palette.error.main,
-      trend: {
-        value: 2,
-        isPositive: false,
-      },
+      id: '2',
+      firstName: 'Jane',
+      lastName: 'Smith',
+      email: 'jane.smith@example.com',
+      department: 'Marketing',
+      position: 'Marketing Manager',
     },
   ];
 
   /**
-   * Quick actions configuration
+   * Handle create template button click
    */
-  const quickActions: QuickAction[] = [
-    {
-      label: 'Create Onboarding',
-      icon: <AddIcon />,
-      onClick: handleCreateOnboarding,
-      color: 'primary',
-    },
-    {
-      label: 'Create Appraisal',
-      icon: <AddIcon />,
-      onClick: handleCreateAppraisal,
-      color: 'secondary',
-    },
-    {
-      label: 'View Employees',
-      icon: <PeopleIcon />,
-      onClick: handleViewEmployees,
-      color: 'info',
-    },
-    {
-      label: 'Review Leave Requests',
-      icon: <EventNoteIcon />,
-      onClick: handleViewLeaveRequests,
-      color: 'warning',
-    },
-  ];
+  const handleCreateTemplateClick = useCallback(() => {
+    setTemplateFormMode('create');
+    setSelectedTemplate(null);
+    setTemplateFormOpen(true);
+  }, []);
 
   /**
-   * Renders a metric card with icon, value, and optional trend
+   * Handle edit template button click
    */
-  const renderMetricCard = (metric: MetricCardData): React.ReactElement => (
-    <Card
-      elevation={2}
-      sx={{
-        height: '100%',
-        transition: 'transform 0.2s, box-shadow 0.2s',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: theme.shadows[8],
-        },
-      }}
-    >
-      <CardContent>
-        <Stack spacing={2}>
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-            }}
-          >
-            <Box
-              sx={{
-                backgroundColor: alpha(metric.color, 0.1),
-                borderRadius: 2,
-                p: 1.5,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {React.cloneElement(metric.icon, {
-                sx: { ...metric.icon.props.sx, color: metric.color },
-              })}
-            </Box>
-            {metric.trend && (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  color: metric.trend.isPositive
-                    ? theme.palette.success.main
-                    : theme.palette.error.main,
-                }}
-              >
-                <TrendingUpIcon
-                  sx={{
-                    fontSize: 20,
-                    transform: metric.trend.isPositive ? 'none' : 'rotate(180deg)',
-                  }}
-                />
-                <Typography variant="body2" fontWeight={600}>
-                  {metric.trend.value}
-                </Typography>
-              </Box>
-            )}
-          </Box>
-          <Box>
-            <Typography
-              variant="h3"
-              component="div"
-              fontWeight={700}
-              color="text.primary"
-              sx={{ mb: 0.5 }}
-            >
-              {metric.value}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {metric.title}
-            </Typography>
-          </Box>
-        </Stack>
-      </CardContent>
-    </Card>
+  const handleEditTemplateClick = useCallback((template: any) => {
+    setTemplateFormMode('edit');
+    setSelectedTemplate(template);
+    setTemplateFormOpen(true);
+  }, []);
+
+  /**
+   * Handle template form submission
+   */
+  const handleTemplateFormSuccess = useCallback(
+    async (data: any) => {
+      if (templateFormMode === 'create') {
+        await createTemplate(data);
+      } else if (selectedTemplate) {
+        await updateTemplate(selectedTemplate.id, data);
+      }
+    },
+    [templateFormMode, selectedTemplate, createTemplate, updateTemplate]
   );
 
   /**
-   * Renders a quick action button
+   * Handle assign workflow button click
    */
-  const renderQuickAction = (action: QuickAction): React.ReactElement => (
-    <Button
-      variant="contained"
-      color={action.color}
-      startIcon={action.icon}
-      onClick={action.onClick}
-      fullWidth
-      size={isMobile ? 'medium' : 'large'}
-      sx={{
-        py: isMobile ? 1.5 : 2,
-        textTransform: 'none',
-        fontWeight: 600,
-        boxShadow: theme.shadows[2],
-        '&:hover': {
-          boxShadow: theme.shadows[6],
-        },
-      }}
-    >
-      {action.label}
-    </Button>
-  );
+  const handleAssignWorkflowClick = useCallback(() => {
+    setWorkflowAssignmentOpen(true);
+  }, []);
 
-  console.log('[HRAdminDashboard] Rendering dashboard', {
-    isMobile,
-    isTablet,
-    metricsCount: metrics.length,
-    actionsCount: quickActions.length,
-  });
+  /**
+   * Handle workflow assignment success
+   */
+  const handleWorkflowAssignmentSuccess = useCallback((workflowId: string) => {
+    console.log('Workflow assigned successfully:', workflowId);
+  }, []);
 
   return (
-    <Box sx={{ width: '100%' }}>
-      {/* Header Section */}
-      <Box sx={{ mb: 4 }}>
-        <Typography
-          variant={isMobile ? 'h4' : 'h3'}
-          component="h1"
-          fontWeight={700}
-          color="text.primary"
-          gutterBottom
-        >
-          HR Admin Dashboard
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Overview of key HR metrics and quick actions
-        </Typography>
-      </Box>
+    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+      <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
+        HR Admin Dashboard
+      </Typography>
 
-      {/* Metrics Grid */}
+      {/* Metrics Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        {metrics.map((metric, index) => (
-          <Grid
-            item
-            xs={12}
-            sm={6}
-            md={6}
-            lg={3}
-            key={`metric-${index}`}
-          >
-            {renderMetricCard(metric)}
-          </Grid>
-        ))}
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography color="text.secondary" variant="body2" gutterBottom>
+                    Total Employees
+                  </Typography>
+                  <Typography variant="h4" fontWeight="bold">
+                    {metrics.totalEmployees}
+                  </Typography>
+                </Box>
+                <PeopleIcon sx={{ fontSize: 48, color: 'primary.main', opacity: 0.3 }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography color="text.secondary" variant="body2" gutterBottom>
+                    Active Leave Requests
+                  </Typography>
+                  <Typography variant="h4" fontWeight="bold">
+                    {metrics.activeLeaveRequests}
+                  </Typography>
+                </Box>
+                <AssignmentIcon sx={{ fontSize: 48, color: 'warning.main', opacity: 0.3 }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography color="text.secondary" variant="body2" gutterBottom>
+                    Pending Appraisals
+                  </Typography>
+                  <Typography variant="h4" fontWeight="bold">
+                    {metrics.pendingAppraisals}
+                  </Typography>
+                </Box>
+                <CheckCircleIcon sx={{ fontSize: 48, color: 'info.main', opacity: 0.3 }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography color="text.secondary" variant="body2" gutterBottom>
+                    Pending Onboarding
+                  </Typography>
+                  <Typography variant="h4" fontWeight="bold">
+                    {metrics.pendingOnboarding}
+                  </Typography>
+                </Box>
+                <PersonAddIcon sx={{ fontSize: 48, color: 'success.main', opacity: 0.3 }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
       </Grid>
 
-      <Divider sx={{ my: 4 }} />
-
-      {/* Quick Actions Section */}
-      <Box sx={{ mb: 4 }}>
-        <Typography
-          variant={isMobile ? 'h5' : 'h4'}
-          component="h2"
-          fontWeight={600}
-          color="text.primary"
-          gutterBottom
-          sx={{ mb: 3 }}
+      {/* Onboarding Management Section */}
+      <Paper sx={{ p: 3, mb: 4 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            mb: 3,
+          }}
         >
-          Quick Actions
-        </Typography>
-        <Grid container spacing={2}>
-          {quickActions.map((action, index) => (
-            <Grid
-              item
-              xs={12}
-              sm={6}
-              md={6}
-              lg={3}
-              key={`action-${index}`}
+          <Typography variant="h5" component="h2" fontWeight="bold">
+            Onboarding Management
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              startIcon={<PersonAddIcon />}
+              onClick={handleAssignWorkflowClick}
+              aria-label="Assign workflow to employee"
             >
-              {renderQuickAction(action)}
-            </Grid>
-          ))}
-        </Grid>
-      </Box>
+              Assign Workflow
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleCreateTemplateClick}
+              aria-label="Create new onboarding template"
+            >
+              Create Template
+            </Button>
+          </Box>
+        </Box>
 
-      {/* Recent Activity Section - Placeholder */}
-      <Box sx={{ mt: 4 }}>
-        <Card elevation={2}>
-          <CardContent>
-            <Typography
-              variant="h6"
-              component="h3"
-              fontWeight={600}
-              color="text.primary"
-              gutterBottom
-            >
-              Recent Activity
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Recent activity feed will be displayed here
-            </Typography>
-          </CardContent>
-        </Card>
-      </Box>
-    </Box>
+        <Divider sx={{ mb: 3 }} />
+
+        <TemplateList
+          onCreateClick={handleCreateTemplateClick}
+          onEditClick={handleEditTemplateClick}
+        />
+      </Paper>
+
+      {/* Template Form Dialog */}
+      <TemplateForm
+        open={templateFormOpen}
+        mode={templateFormMode}
+        initialData={selectedTemplate}
+        onSuccess={handleTemplateFormSuccess}
+        onClose={() => setTemplateFormOpen(false)}
+      />
+
+      {/* Workflow Assignment Dialog */}
+      <WorkflowAssignment
+        open={workflowAssignmentOpen}
+        onClose={() => setWorkflowAssignmentOpen(false)}
+        onSuccess={handleWorkflowAssignmentSuccess}
+        employees={mockEmployees}
+        employeesLoading={false}
+      />
+    </Container>
   );
 };
 

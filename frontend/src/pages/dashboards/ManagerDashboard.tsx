@@ -1,301 +1,232 @@
+/**
+ * Manager Dashboard Component
+ * 
+ * Main dashboard for managers to view team metrics, leave requests, and onboarding progress.
+ * Provides overview of team performance, pending approvals, and onboarding status.
+ * 
+ * Features:
+ * - Team metrics overview
+ * - Pending leave requests
+ * - Team onboarding progress tracking
+ * - Quick action buttons
+ * - Responsive layout
+ * 
+ * @module pages/dashboards/ManagerDashboard
+ */
+
 import React from 'react';
 import {
   Box,
+  Container,
+  Grid,
+  Paper,
+  Typography,
   Card,
   CardContent,
-  Grid,
-  Typography,
   Button,
-  useTheme,
-  useMediaQuery,
-  Paper,
-  Stack,
-  Divider,
 } from '@mui/material';
 import {
   People as PeopleIcon,
+  EventAvailable as EventAvailableIcon,
   Assignment as AssignmentIcon,
   TrendingUp as TrendingUpIcon,
-  CheckCircle as CheckCircleIcon,
-  Pending as PendingIcon,
-  EventNote as EventNoteIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { TeamProgressDashboard } from '../../components/onboarding/TeamProgressDashboard';
 
 /**
- * Metric card data structure
+ * Metric card component for displaying key statistics
  */
-interface MetricCardData {
-  title: string;
-  value: string | number;
-  icon: React.ReactElement;
-  color: string;
-  subtitle?: string;
+interface MetricCardProps {
+  readonly title: string;
+  readonly value: string | number;
+  readonly icon: React.ReactElement;
+  readonly color: string;
+  readonly subtitle?: string;
 }
 
-/**
- * Quick action button configuration
- */
-interface QuickAction {
-  label: string;
-  icon: React.ReactElement;
-  path: string;
-  color: 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'error';
-}
+const MetricCard: React.FC<MetricCardProps> = ({
+  title,
+  value,
+  icon,
+  color,
+  subtitle,
+}) => (
+  <Card>
+    <CardContent>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Box
+          sx={{
+            backgroundColor: `${color}15`,
+            borderRadius: 2,
+            p: 1,
+            mr: 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {React.cloneElement(icon, { sx: { color, fontSize: 32 } })}
+        </Box>
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            {title}
+          </Typography>
+          <Typography variant="h4" fontWeight="bold">
+            {value}
+          </Typography>
+          {subtitle && (
+            <Typography variant="caption" color="text.secondary">
+              {subtitle}
+            </Typography>
+          )}
+        </Box>
+      </Box>
+    </CardContent>
+  </Card>
+);
 
 /**
  * Manager Dashboard Component
  * 
- * Displays manager-specific dashboard with:
- * - Team metrics (team size, pending approvals, onboarding progress)
- * - Quick action buttons for common manager tasks
- * - Responsive grid layout across all breakpoints
- * - Material-UI themed components
+ * Main dashboard view for managers with team metrics and onboarding progress.
+ * Displays key performance indicators and team onboarding status.
  * 
- * @component
  * @example
  * ```tsx
- * <Route path="/dashboard" element={<ManagerDashboard />} />
+ * <ManagerDashboard />
  * ```
  */
 export const ManagerDashboard: React.FC = () => {
-  const theme = useTheme();
   const navigate = useNavigate();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
-
-  console.log('[ManagerDashboard] Rendering dashboard', {
-    isMobile,
-    isTablet,
-    timestamp: new Date().toISOString(),
-  });
-
-  /**
-   * Handles navigation to specified route
-   */
-  const handleNavigate = (path: string): void => {
-    console.log('[ManagerDashboard] Navigating to:', { path });
-    navigate(path);
-  };
-
-  /**
-   * Metric cards configuration
-   * TODO: Replace with actual data from API
-   */
-  const metricCards: MetricCardData[] = [
-    {
-      title: 'Team Size',
-      value: 12,
-      icon: <PeopleIcon sx={{ fontSize: 40 }} />,
-      color: theme.palette.primary.main,
-      subtitle: 'Active team members',
-    },
-    {
-      title: 'Pending Approvals',
-      value: 5,
-      icon: <PendingIcon sx={{ fontSize: 40 }} />,
-      color: theme.palette.warning.main,
-      subtitle: 'Require your attention',
-    },
-    {
-      title: 'Team Onboarding',
-      value: '75%',
-      icon: <TrendingUpIcon sx={{ fontSize: 40 }} />,
-      color: theme.palette.success.main,
-      subtitle: 'Average completion rate',
-    },
-    {
-      title: 'Leave Requests',
-      value: 3,
-      icon: <EventNoteIcon sx={{ fontSize: 40 }} />,
-      color: theme.palette.info.main,
-      subtitle: 'Pending review',
-    },
-  ];
-
-  /**
-   * Quick action buttons configuration
-   */
-  const quickActions: QuickAction[] = [
-    {
-      label: 'View Team',
-      icon: <PeopleIcon />,
-      path: '/employees',
-      color: 'primary',
-    },
-    {
-      label: 'Approve Requests',
-      icon: <CheckCircleIcon />,
-      path: '/leave',
-      color: 'success',
-    },
-    {
-      label: 'Onboarding Tasks',
-      icon: <AssignmentIcon />,
-      path: '/onboarding',
-      color: 'info',
-    },
-    {
-      label: 'Team Appraisals',
-      icon: <TrendingUpIcon />,
-      path: '/appraisals',
-      color: 'secondary',
-    },
-  ];
 
   return (
-    <Box sx={{ width: '100%' }}>
-      {/* Dashboard Header */}
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      {/* Header */}
       <Box sx={{ mb: 4 }}>
-        <Typography
-          variant={isMobile ? 'h5' : 'h4'}
-          component="h1"
-          gutterBottom
-          sx={{ fontWeight: 600 }}
-        >
+        <Typography variant="h4" component="h1" fontWeight="bold" gutterBottom>
           Manager Dashboard
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Welcome back! Here's an overview of your team's status.
+          Overview of your team's performance and onboarding progress
         </Typography>
       </Box>
 
       {/* Metrics Grid */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        {metricCards.map((metric, index) => (
-          <Grid item xs={12} sm={6} md={6} lg={3} key={index}>
-            <Card
-              elevation={2}
-              sx={{
-                height: '100%',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: theme.shadows[8],
-                },
-              }}
-            >
-              <CardContent>
-                <Stack spacing={2}>
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <Typography
-                      variant="subtitle2"
-                      color="text.secondary"
-                      sx={{ fontWeight: 500 }}
-                    >
-                      {metric.title}
-                    </Typography>
-                    <Box
-                      sx={{
-                        color: metric.color,
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                    >
-                      {metric.icon}
-                    </Box>
-                  </Box>
-                  <Typography
-                    variant={isMobile ? 'h4' : 'h3'}
-                    component="div"
-                    sx={{ fontWeight: 700, color: metric.color }}
-                  >
-                    {metric.value}
-                  </Typography>
-                  {metric.subtitle && (
-                    <Typography variant="caption" color="text.secondary">
-                      {metric.subtitle}
-                    </Typography>
-                  )}
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Team Members"
+            value={12}
+            icon={<PeopleIcon />}
+            color="#1976d2"
+            subtitle="Active employees"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Pending Approvals"
+            value={5}
+            icon={<EventAvailableIcon />}
+            color="#ed6c02"
+            subtitle="Leave requests"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Active Onboarding"
+            value={3}
+            icon={<AssignmentIcon />}
+            color="#9c27b0"
+            subtitle="In progress"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Team Performance"
+            value="92%"
+            icon={<TrendingUpIcon />}
+            color="#2e7d32"
+            subtitle="Average completion"
+          />
+        </Grid>
       </Grid>
 
-      {/* Quick Actions Section */}
-      <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-        <Typography
-          variant="h6"
-          component="h2"
-          gutterBottom
-          sx={{ fontWeight: 600, mb: 3 }}
-        >
+      {/* Quick Actions */}
+      <Paper sx={{ p: 3, mb: 4 }}>
+        <Typography variant="h6" fontWeight="medium" gutterBottom>
           Quick Actions
         </Typography>
-        <Divider sx={{ mb: 3 }} />
-        <Grid container spacing={2}>
-          {quickActions.map((action, index) => (
-            <Grid item xs={12} sm={6} md={3} key={index}>
-              <Button
-                variant="contained"
-                color={action.color}
-                fullWidth
-                size="large"
-                startIcon={action.icon}
-                onClick={() => handleNavigate(action.path)}
-                sx={{
-                  py: 2,
-                  textTransform: 'none',
-                  fontSize: '1rem',
-                  fontWeight: 500,
-                  boxShadow: theme.shadows[2],
-                  '&:hover': {
-                    boxShadow: theme.shadows[6],
-                  },
-                }}
-              >
-                {action.label}
-              </Button>
-            </Grid>
-          ))}
-        </Grid>
-      </Paper>
-
-      {/* Recent Activity Section - Placeholder */}
-      <Paper elevation={2} sx={{ p: 3 }}>
-        <Typography
-          variant="h6"
-          component="h2"
-          gutterBottom
-          sx={{ fontWeight: 600, mb: 3 }}
-        >
-          Recent Team Activity
-        </Typography>
-        <Divider sx={{ mb: 3 }} />
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: 200,
-            backgroundColor: theme.palette.grey[50],
-            borderRadius: 1,
-            border: `1px dashed ${theme.palette.grey[300]}`,
-          }}
-        >
-          <Stack spacing={2} alignItems="center">
-            <AssignmentIcon
-              sx={{ fontSize: 48, color: theme.palette.grey[400] }}
-            />
-            <Typography variant="body1" color="text.secondary">
-              Recent activity will appear here
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Team member actions, approvals, and updates
-            </Typography>
-          </Stack>
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 2 }}>
+          <Button
+            variant="contained"
+            startIcon={<EventAvailableIcon />}
+            onClick={() => navigate('/leave/approvals')}
+          >
+            Review Leave Requests
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<AssignmentIcon />}
+            onClick={() => navigate('/onboarding/team')}
+          >
+            View Team Onboarding
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<PeopleIcon />}
+            onClick={() => navigate('/team')}
+          >
+            Manage Team
+          </Button>
         </Box>
       </Paper>
-    </Box>
+
+      {/* Team Onboarding Progress Section */}
+      <Box sx={{ mb: 4 }}>
+        <TeamProgressDashboard
+          title="Team Onboarding Progress"
+          height={600}
+          onRowClick={(employeeId) => {
+            if (import.meta.env.VITE_API_DEBUG === 'true') {
+              console.debug('[ManagerDashboard] Employee row clicked', {
+                employeeId,
+                timestamp: new Date().toISOString(),
+              });
+            }
+            navigate(`/employee/${employeeId}/onboarding`);
+          }}
+        />
+      </Box>
+
+      {/* Additional Sections Placeholder */}
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 3, minHeight: 300 }}>
+            <Typography variant="h6" fontWeight="medium" gutterBottom>
+              Recent Activity
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Team activity feed will be displayed here
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 3, minHeight: 300 }}>
+            <Typography variant="h6" fontWeight="medium" gutterBottom>
+              Upcoming Events
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Team calendar and events will be displayed here
+            </Typography>
+          </Paper>
+        </Grid>
+      </Grid>
+    </Container>
   );
 };
 
+/**
+ * Export component as default
+ */
 export default ManagerDashboard;
