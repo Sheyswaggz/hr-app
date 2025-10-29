@@ -13,6 +13,8 @@ const DashboardLayout = lazy(() => import('../layouts/DashboardLayout'));
 const HRAdminDashboard = lazy(() => import('../pages/dashboards/HRAdminDashboard'));
 const ManagerDashboard = lazy(() => import('../pages/dashboards/ManagerDashboard'));
 const EmployeeDashboard = lazy(() => import('../pages/dashboards/EmployeeDashboard'));
+const CreateTemplatePage = lazy(() => import('../pages/onboarding/CreateTemplatePage'));
+const EditTemplatePage = lazy(() => import('../pages/onboarding/EditTemplatePage'));
 
 /**
  * Loading fallback component displayed during lazy component loading
@@ -154,6 +156,24 @@ export const AppRoutes: React.FC = () => {
             element={<RoleBasedDashboardRedirect />}
           />
         </Route>
+
+        {/* Onboarding Template Routes - Protected for HR_ADMIN */}
+        <Route
+          path="/onboarding/templates/new"
+          element={
+            <ProtectedRoute allowedRoles={[UserRole.HR_ADMIN]}>
+              <CreateTemplatePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/onboarding/templates/:templateId/edit"
+          element={
+            <ProtectedRoute allowedRoles={[UserRole.HR_ADMIN]}>
+              <EditTemplatePage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Catch-all route for 404 - redirects to dashboard */}
         <Route

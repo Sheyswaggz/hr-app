@@ -8,6 +8,7 @@
  * @module db/seed
  */
 
+import 'dotenv/config';
 import bcrypt from 'bcrypt';
 
 import { executeTransaction, queryOne, queryMany, type TransactionCallback } from './index.js';
@@ -80,7 +81,7 @@ interface UserSeedData {
   readonly password: string;
   readonly firstName: string;
   readonly lastName: string;
-  readonly role: 'hr_admin' | 'manager' | 'employee';
+  readonly role: 'HR_ADMIN' | 'MANAGER' | 'EMPLOYEE';
   readonly isActive: boolean;
 }
 
@@ -89,12 +90,41 @@ interface UserSeedData {
  */
 interface EmployeeSeedData {
   readonly userEmail: string;
-  readonly employeeNumber: string;
-  readonly department: string;
-  readonly position: string;
-  readonly hireDate: string;
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly department?: string;
+  readonly position?: string;
+  readonly hireDate?: string;
   readonly managerEmail?: string;
-  readonly status: 'active' | 'on_leave' | 'terminated';
+}
+
+/**
+ * Onboarding template seed data
+ */
+interface OnboardingTemplateSeedData {
+  readonly name: string;
+  readonly description: string;
+  readonly isActive: boolean;
+  readonly createdByEmail: string;
+  readonly departmentId?: string;
+  readonly tasks: Array<{
+    readonly title: string;
+    readonly description: string;
+    readonly daysUntilDue: number;
+    readonly order: number;
+    readonly requiresDocument: boolean;
+  }>;
+}
+
+/**
+ * Onboarding workflow seed data
+ */
+interface OnboardingWorkflowSeedData {
+  readonly employeeEmail: string;
+  readonly templateName: string;
+  readonly startDate: string;
+  readonly assignedByEmail: string;
+  readonly managerEmail?: string;
 }
 
 /**
@@ -210,7 +240,7 @@ async function seedUsers(client: any): Promise<SeedResult> {
         password: DEFAULT_PASSWORD,
         firstName: 'Admin',
         lastName: 'User',
-        role: 'hr_admin',
+        role: 'HR_ADMIN',
         isActive: true,
       },
       {
@@ -218,7 +248,7 @@ async function seedUsers(client: any): Promise<SeedResult> {
         password: DEFAULT_PASSWORD,
         firstName: 'John',
         lastName: 'Manager',
-        role: 'manager',
+        role: 'MANAGER',
         isActive: true,
       },
       {
@@ -226,7 +256,7 @@ async function seedUsers(client: any): Promise<SeedResult> {
         password: DEFAULT_PASSWORD,
         firstName: 'Sarah',
         lastName: 'Manager',
-        role: 'manager',
+        role: 'MANAGER',
         isActive: true,
       },
       {
@@ -234,7 +264,7 @@ async function seedUsers(client: any): Promise<SeedResult> {
         password: DEFAULT_PASSWORD,
         firstName: 'Alice',
         lastName: 'Smith',
-        role: 'employee',
+        role: 'EMPLOYEE',
         isActive: true,
       },
       {
@@ -242,7 +272,7 @@ async function seedUsers(client: any): Promise<SeedResult> {
         password: DEFAULT_PASSWORD,
         firstName: 'Bob',
         lastName: 'Johnson',
-        role: 'employee',
+        role: 'EMPLOYEE',
         isActive: true,
       },
       {
@@ -250,7 +280,7 @@ async function seedUsers(client: any): Promise<SeedResult> {
         password: DEFAULT_PASSWORD,
         firstName: 'Charlie',
         lastName: 'Brown',
-        role: 'employee',
+        role: 'EMPLOYEE',
         isActive: true,
       },
       {
@@ -258,7 +288,7 @@ async function seedUsers(client: any): Promise<SeedResult> {
         password: DEFAULT_PASSWORD,
         firstName: 'Diana',
         lastName: 'Wilson',
-        role: 'employee',
+        role: 'EMPLOYEE',
         isActive: true,
       },
       {
@@ -266,7 +296,7 @@ async function seedUsers(client: any): Promise<SeedResult> {
         password: DEFAULT_PASSWORD,
         firstName: 'Eve',
         lastName: 'Davis',
-        role: 'employee',
+        role: 'EMPLOYEE',
         isActive: true,
       },
     ];
@@ -362,64 +392,64 @@ async function seedEmployees(client: any): Promise<SeedResult> {
     const employees: EmployeeSeedData[] = [
       {
         userEmail: 'manager1@hrapp.com',
-        employeeNumber: 'EMP001',
+        firstName: 'John',
+        lastName: 'Manager',
         department: 'Engineering',
         position: 'Engineering Manager',
         hireDate: '2020-01-15',
-        status: 'active',
       },
       {
         userEmail: 'manager2@hrapp.com',
-        employeeNumber: 'EMP002',
+        firstName: 'Sarah',
+        lastName: 'Manager',
         department: 'Sales',
         position: 'Sales Manager',
         hireDate: '2020-03-01',
-        status: 'active',
       },
       {
         userEmail: 'employee1@hrapp.com',
-        employeeNumber: 'EMP003',
+        firstName: 'Alice',
+        lastName: 'Smith',
         department: 'Engineering',
         position: 'Senior Software Engineer',
         hireDate: '2021-06-01',
         managerEmail: 'manager1@hrapp.com',
-        status: 'active',
       },
       {
         userEmail: 'employee2@hrapp.com',
-        employeeNumber: 'EMP004',
+        firstName: 'Bob',
+        lastName: 'Johnson',
         department: 'Engineering',
         position: 'Software Engineer',
         hireDate: '2022-01-15',
         managerEmail: 'manager1@hrapp.com',
-        status: 'active',
       },
       {
         userEmail: 'employee3@hrapp.com',
-        employeeNumber: 'EMP005',
+        firstName: 'Charlie',
+        lastName: 'Brown',
         department: 'Engineering',
         position: 'Junior Software Engineer',
         hireDate: '2023-03-01',
         managerEmail: 'manager1@hrapp.com',
-        status: 'active',
       },
       {
         userEmail: 'employee4@hrapp.com',
-        employeeNumber: 'EMP006',
+        firstName: 'Diana',
+        lastName: 'Wilson',
         department: 'Sales',
         position: 'Sales Representative',
         hireDate: '2021-09-01',
         managerEmail: 'manager2@hrapp.com',
-        status: 'active',
       },
       {
         userEmail: 'employee5@hrapp.com',
-        employeeNumber: 'EMP007',
+        firstName: 'Eve',
+        lastName: 'Davis',
         department: 'Sales',
         position: 'Sales Representative',
         hireDate: '2022-05-15',
         managerEmail: 'manager2@hrapp.com',
-        status: 'active',
       },
     ];
 
@@ -464,26 +494,15 @@ async function seedEmployees(client: any): Promise<SeedResult> {
 
       const result = await client.query(
         `
-        INSERT INTO employees (user_id, employee_number, department, position, hire_date, manager_id, status)
+        INSERT INTO employees (user_id, first_name, last_name, department, position, hire_date, manager_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (user_id)
-        DO UPDATE SET
-          employee_number = EXCLUDED.employee_number,
-          department = EXCLUDED.department,
-          position = EXCLUDED.position,
-          hire_date = EXCLUDED.hire_date,
-          manager_id = EXCLUDED.manager_id,
-          status = EXCLUDED.status,
-          updated_at = NOW()
-        RETURNING (xmax = 0) AS inserted
+        RETURNING id
         `,
-        [userId, employee.employeeNumber, employee.department, employee.position, employee.hireDate, managerId, employee.status]
+        [userId, employee.firstName, employee.lastName, employee.department, employee.position, employee.hireDate, managerId]
       );
 
-      if (result.rows[0]?.inserted) {
+      if (result.rows.length > 0) {
         recordsCreated++;
-      } else {
-        recordsUpdated++;
       }
     }
 
@@ -508,6 +527,518 @@ async function seedEmployees(client: any): Promise<SeedResult> {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     console.error('[SEED_EMPLOYEES] Failed to seed employees:', {
+      error: errorMessage,
+      executionTimeMs,
+      timestamp: new Date().toISOString(),
+    });
+
+    return {
+      success: false,
+      metadata,
+      recordsCreated: 0,
+      recordsUpdated: 0,
+      executionTimeMs,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Seed onboarding_templates table with sample data
+ * 
+ * Creates onboarding templates with tasks for various departments.
+ * Uses upsert logic for idempotency.
+ * 
+ * @param client - Database client for transaction
+ * @returns Seed result
+ */
+async function seedOnboardingTemplates(client: any): Promise<SeedResult> {
+  const startTime = Date.now();
+  const metadata: SeedMetadata = {
+    name: 'onboarding_templates',
+    description: 'Seed onboarding templates with tasks',
+    recordCount: 0,
+    timestamp: new Date(),
+  };
+
+  try {
+    console.log('[SEED_ONBOARDING_TEMPLATES] Starting onboarding templates seed...');
+
+    const templates: OnboardingTemplateSeedData[] = [
+      {
+        name: 'Software Engineer Onboarding',
+        description: 'Standard onboarding process for new software engineers',
+        isActive: true,
+        createdByEmail: 'admin@hrapp.com',
+        tasks: [
+          {
+            title: 'Complete HR Orientation',
+            description: 'Attend HR orientation session, review company policies, and complete required paperwork',
+            daysUntilDue: 1,
+            order: 1,
+            requiresDocument: true,
+          },
+          {
+            title: 'Setup Development Environment',
+            description: 'Install required software (IDE, Git, Node.js, etc.) and configure development tools',
+            daysUntilDue: 2,
+            order: 2,
+            requiresDocument: false,
+          },
+          {
+            title: 'Complete Security Training',
+            description: 'Complete online security awareness training module and pass the assessment',
+            daysUntilDue: 3,
+            order: 3,
+            requiresDocument: true,
+          },
+          {
+            title: 'Review Codebase and Architecture',
+            description: 'Review main codebase, understand system architecture, and setup local development environment',
+            daysUntilDue: 5,
+            order: 4,
+            requiresDocument: false,
+          },
+          {
+            title: 'Meet Team Members',
+            description: 'Schedule 1:1 meetings with all team members to understand their roles and responsibilities',
+            daysUntilDue: 7,
+            order: 5,
+            requiresDocument: false,
+          },
+          {
+            title: 'Complete First Code Contribution',
+            description: 'Complete a small bug fix or feature implementation and submit your first pull request',
+            daysUntilDue: 14,
+            order: 6,
+            requiresDocument: false,
+          },
+        ],
+      },
+      {
+        name: 'Sales Representative Onboarding',
+        description: 'Standard onboarding process for new sales representatives',
+        isActive: true,
+        createdByEmail: 'admin@hrapp.com',
+        tasks: [
+          {
+            title: 'Complete HR Orientation',
+            description: 'Attend HR orientation session and complete required paperwork',
+            daysUntilDue: 1,
+            order: 1,
+            requiresDocument: true,
+          },
+          {
+            title: 'Sales Training Program',
+            description: 'Complete 2-week comprehensive sales training program covering products and sales techniques',
+            daysUntilDue: 14,
+            order: 2,
+            requiresDocument: true,
+          },
+          {
+            title: 'Shadow Senior Sales Rep',
+            description: 'Shadow a senior sales representative for 1 week to observe client interactions',
+            daysUntilDue: 21,
+            order: 3,
+            requiresDocument: false,
+          },
+          {
+            title: 'Complete CRM Training',
+            description: 'Learn to use the CRM system for tracking leads, opportunities, and customer interactions',
+            daysUntilDue: 7,
+            order: 4,
+            requiresDocument: false,
+          },
+          {
+            title: 'First Sales Call',
+            description: 'Complete your first sales call with supervision and document the outcome',
+            daysUntilDue: 28,
+            order: 5,
+            requiresDocument: true,
+          },
+        ],
+      },
+      {
+        name: 'Manager Onboarding',
+        description: 'Onboarding process for new managers',
+        isActive: true,
+        createdByEmail: 'admin@hrapp.com',
+        tasks: [
+          {
+            title: 'Complete HR Orientation',
+            description: 'Attend HR orientation session and review manager-specific policies',
+            daysUntilDue: 1,
+            order: 1,
+            requiresDocument: true,
+          },
+          {
+            title: 'Leadership Training',
+            description: 'Complete leadership and management training program',
+            daysUntilDue: 7,
+            order: 2,
+            requiresDocument: true,
+          },
+          {
+            title: 'Review Team Structure',
+            description: 'Meet with HR to review team structure, roles, and current projects',
+            daysUntilDue: 2,
+            order: 3,
+            requiresDocument: false,
+          },
+          {
+            title: 'One-on-Ones with Direct Reports',
+            description: 'Schedule and complete initial 1:1 meetings with all direct reports',
+            daysUntilDue: 7,
+            order: 4,
+            requiresDocument: false,
+          },
+          {
+            title: 'Budget and Resource Review',
+            description: 'Review department budget, resources, and planning processes',
+            daysUntilDue: 10,
+            order: 5,
+            requiresDocument: false,
+          },
+        ],
+      },
+    ];
+
+    let recordsCreated = 0;
+    let recordsUpdated = 0;
+
+    for (const template of templates) {
+      // Get created_by user_id
+      const createdByResult = await client.query(
+        'SELECT id FROM users WHERE email = $1',
+        [template.createdByEmail]
+      );
+
+      if (createdByResult.rows.length === 0) {
+        console.warn(`[SEED_ONBOARDING_TEMPLATES] Created by user not found: ${template.createdByEmail}`);
+        continue;
+      }
+
+      const createdById = createdByResult.rows[0].id;
+
+      // Insert or update template
+      const templateResult = await client.query(
+        `
+        INSERT INTO onboarding_templates (name, description, is_active, created_by, department_id)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (name)
+        DO UPDATE SET
+          description = EXCLUDED.description,
+          is_active = EXCLUDED.is_active,
+          updated_at = NOW()
+        RETURNING id, (xmax = 0) AS inserted
+        `,
+        [template.name, template.description, template.isActive, createdById, template.departmentId || null]
+      );
+
+      if (templateResult.rows.length === 0) {
+        console.warn(`[SEED_ONBOARDING_TEMPLATES] Failed to insert template: ${template.name}`);
+        continue;
+      }
+
+      const templateId = templateResult.rows[0].id;
+      const isTemplateInserted = templateResult.rows[0].inserted;
+
+      if (isTemplateInserted) {
+        recordsCreated++;
+      } else {
+        recordsUpdated++;
+      }
+
+      // Delete existing tasks for this template (to handle updates)
+      await client.query(
+        'DELETE FROM onboarding_template_tasks WHERE template_id = $1',
+        [templateId]
+      );
+
+      // Insert template tasks
+      for (const task of template.tasks) {
+        await client.query(
+          `
+          INSERT INTO onboarding_template_tasks (
+            template_id, title, description, days_until_due, order_number, requires_document
+          )
+          VALUES ($1, $2, $3, $4, $5, $6)
+          `,
+          [
+            templateId,
+            task.title,
+            task.description,
+            task.daysUntilDue,
+            task.order,
+            task.requiresDocument,
+          ]
+        );
+      }
+    }
+
+    const executionTimeMs = Date.now() - startTime;
+
+    console.log('[SEED_ONBOARDING_TEMPLATES] Onboarding templates seeded successfully:', {
+      recordsCreated,
+      recordsUpdated,
+      executionTimeMs,
+    });
+
+    return {
+      success: true,
+      metadata,
+      recordsCreated,
+      recordsUpdated,
+      executionTimeMs,
+    };
+  } catch (error) {
+    const executionTimeMs = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    console.error('[SEED_ONBOARDING_TEMPLATES] Failed to seed onboarding templates:', {
+      error: errorMessage,
+      executionTimeMs,
+      timestamp: new Date().toISOString(),
+    });
+
+    return {
+      success: false,
+      metadata,
+      recordsCreated: 0,
+      recordsUpdated: 0,
+      executionTimeMs,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Seed onboarding_workflows table with sample data
+ * 
+ * Creates onboarding workflows for employees based on templates.
+ * Uses upsert logic for idempotency.
+ * 
+ * @param client - Database client for transaction
+ * @returns Seed result
+ */
+async function seedOnboardingWorkflows(client: any): Promise<SeedResult> {
+  const startTime = Date.now();
+  const metadata: SeedMetadata = {
+    name: 'onboarding_workflows',
+    description: 'Seed onboarding workflows for employees',
+    recordCount: 0,
+    timestamp: new Date(),
+  };
+
+  try {
+    console.log('[SEED_ONBOARDING_WORKFLOWS] Starting onboarding workflows seed...');
+
+    const workflows: OnboardingWorkflowSeedData[] = [
+      {
+        employeeEmail: 'employee3@hrapp.com',
+        templateName: 'Software Engineer Onboarding',
+        startDate: '2023-03-01',
+        assignedByEmail: 'admin@hrapp.com',
+        managerEmail: 'manager1@hrapp.com',
+      },
+      {
+        employeeEmail: 'employee5@hrapp.com',
+        templateName: 'Sales Representative Onboarding',
+        startDate: '2022-05-15',
+        assignedByEmail: 'admin@hrapp.com',
+        managerEmail: 'manager2@hrapp.com',
+      },
+    ];
+
+    let recordsCreated = 0;
+    let recordsUpdated = 0;
+
+    for (const workflow of workflows) {
+      // Get employee_id
+      const employeeResult = await client.query(
+        `
+        SELECT e.id 
+        FROM employees e
+        JOIN users u ON e.user_id = u.id
+        WHERE u.email = $1
+        `,
+        [workflow.employeeEmail]
+      );
+
+      if (employeeResult.rows.length === 0) {
+        console.warn(`[SEED_ONBOARDING_WORKFLOWS] Employee not found: ${workflow.employeeEmail}`);
+        continue;
+      }
+
+      const employeeId = employeeResult.rows[0].id;
+
+      // Get template_id
+      const templateResult = await client.query(
+        'SELECT id FROM onboarding_templates WHERE name = $1',
+        [workflow.templateName]
+      );
+
+      if (templateResult.rows.length === 0) {
+        console.warn(`[SEED_ONBOARDING_WORKFLOWS] Template not found: ${workflow.templateName}`);
+        continue;
+      }
+
+      const templateId = templateResult.rows[0].id;
+
+      // Get assigned_by user_id
+      const assignedByResult = await client.query(
+        'SELECT id FROM users WHERE email = $1',
+        [workflow.assignedByEmail]
+      );
+
+      if (assignedByResult.rows.length === 0) {
+        console.warn(`[SEED_ONBOARDING_WORKFLOWS] Assigned by user not found: ${workflow.assignedByEmail}`);
+        continue;
+      }
+
+      const assignedById = assignedByResult.rows[0].id;
+
+      // Get manager_id if provided
+      let managerId = null;
+      if (workflow.managerEmail) {
+        const managerUserResult = await client.query(
+          'SELECT id FROM users WHERE email = $1',
+          [workflow.managerEmail]
+        );
+
+        if (managerUserResult.rows.length > 0) {
+          const managerUserId = managerUserResult.rows[0].id;
+
+          const managerEmployeeResult = await client.query(
+            'SELECT id FROM employees WHERE user_id = $1',
+            [managerUserId]
+          );
+
+          if (managerEmployeeResult.rows.length > 0) {
+            managerId = managerEmployeeResult.rows[0].id;
+          }
+        }
+      }
+
+      // Get template tasks to calculate expected completion date
+      const templateTasks = await client.query(
+        'SELECT MAX(days_until_due) as max_days FROM onboarding_template_tasks WHERE template_id = $1',
+        [templateId]
+      );
+
+      const maxDays = templateTasks.rows[0]?.max_days || 30;
+      const startDate = new Date(workflow.startDate);
+      const expectedCompletionDate = new Date(startDate);
+      expectedCompletionDate.setDate(expectedCompletionDate.getDate() + maxDays);
+
+      // Insert workflow
+      const workflowResult = await client.query(
+        `
+        INSERT INTO onboarding_workflows (
+          employee_id, template_id, status, progress, start_date, 
+          expected_completion_date, assigned_by, manager_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (employee_id, template_id)
+        DO UPDATE SET
+          status = EXCLUDED.status,
+          progress = EXCLUDED.progress,
+          start_date = EXCLUDED.start_date,
+          expected_completion_date = EXCLUDED.expected_completion_date,
+          updated_at = NOW()
+        RETURNING id, (xmax = 0) AS inserted
+        `,
+        [
+          employeeId,
+          templateId,
+          'IN_PROGRESS',
+          50,
+          workflow.startDate,
+          expectedCompletionDate,
+          assignedById,
+          managerId,
+        ]
+      );
+
+      if (workflowResult.rows[0]?.inserted) {
+        recordsCreated++;
+      } else {
+        recordsUpdated++;
+      }
+
+      const workflowId = workflowResult.rows[0].id;
+
+      // Get template tasks and create workflow tasks
+      const tasks = await client.query(
+        'SELECT * FROM onboarding_template_tasks WHERE template_id = $1 ORDER BY order_number ASC',
+        [templateId]
+      );
+
+      // Delete existing workflow tasks (to handle updates)
+      await client.query(
+        'DELETE FROM onboarding_tasks WHERE workflow_id = $1',
+        [workflowId]
+      );
+
+      // Create workflow tasks from template tasks
+      for (const task of tasks.rows) {
+        const dueDate = new Date(startDate);
+        dueDate.setDate(dueDate.getDate() + task.days_until_due);
+
+        // Determine task status (some completed, some pending)
+        let status = 'PENDING';
+        let completedAt = null;
+        if (task.order_number <= 2) {
+          status = 'COMPLETED';
+          completedAt = new Date(dueDate);
+          completedAt.setDate(completedAt.getDate() - 1); // Completed 1 day before due
+        } else if (task.order_number === 3) {
+          status = 'IN_PROGRESS';
+        }
+
+        await client.query(
+          `
+          INSERT INTO onboarding_tasks (
+            workflow_id, employee_id, title, description, due_date, 
+            status, order_number, requires_document, completed_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `,
+          [
+            workflowId,
+            employeeId,
+            task.title,
+            task.description,
+            dueDate,
+            status,
+            task.order_number,
+            task.requires_document,
+            completedAt,
+          ]
+        );
+      }
+    }
+
+    const executionTimeMs = Date.now() - startTime;
+
+    console.log('[SEED_ONBOARDING_WORKFLOWS] Onboarding workflows seeded successfully:', {
+      recordsCreated,
+      recordsUpdated,
+      executionTimeMs,
+    });
+
+    return {
+      success: true,
+      metadata,
+      recordsCreated,
+      recordsUpdated,
+      executionTimeMs,
+    };
+  } catch (error) {
+    const executionTimeMs = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    console.error('[SEED_ONBOARDING_WORKFLOWS] Failed to seed onboarding workflows:', {
       error: errorMessage,
       executionTimeMs,
       timestamp: new Date().toISOString(),
@@ -1269,6 +1800,9 @@ export async function cleanupSeedData(): Promise<{
         'leave_requests',
         'appraisals',
         'onboarding_tasks',
+        'onboarding_workflows',
+        'onboarding_template_tasks',
+        'onboarding_templates',
         'employees',
         'users',
       ];
@@ -1366,33 +1900,26 @@ export async function seed(options?: {
           throw new Error(`Employees seed failed: ${employeesResult.error}`);
         }
 
-        // Seed onboarding tasks
-        const onboardingTasksResult = await seedOnboardingTasks(client);
-        seedResults.push(onboardingTasksResult);
-        if (!onboardingTasksResult.success) {
-          throw new Error(`Onboarding tasks seed failed: ${onboardingTasksResult.error}`);
+        // Seed onboarding templates
+        const onboardingTemplatesResult = await seedOnboardingTemplates(client);
+        seedResults.push(onboardingTemplatesResult);
+        if (!onboardingTemplatesResult.success) {
+          throw new Error(`Onboarding templates seed failed: ${onboardingTemplatesResult.error}`);
         }
 
-        // Seed appraisals
-        const appraisalsResult = await seedAppraisals(client);
-        seedResults.push(appraisalsResult);
-        if (!appraisalsResult.success) {
-          throw new Error(`Appraisals seed failed: ${appraisalsResult.error}`);
+        // Seed onboarding workflows
+        const onboardingWorkflowsResult = await seedOnboardingWorkflows(client);
+        seedResults.push(onboardingWorkflowsResult);
+        if (!onboardingWorkflowsResult.success) {
+          throw new Error(`Onboarding workflows seed failed: ${onboardingWorkflowsResult.error}`);
         }
 
-        // Seed leave requests
-        const leaveRequestsResult = await seedLeaveRequests(client);
-        seedResults.push(leaveRequestsResult);
-        if (!leaveRequestsResult.success) {
-          throw new Error(`Leave requests seed failed: ${leaveRequestsResult.error}`);
-        }
+        // Note: onboarding_tasks are now created through workflows, not seeded directly
+        // The seedOnboardingTasks function is legacy and has been disabled
 
-        // Seed leave balances
-        const leaveBalancesResult = await seedLeaveBalances(client);
-        seedResults.push(leaveBalancesResult);
-        if (!leaveBalancesResult.success) {
-          throw new Error(`Leave balances seed failed: ${leaveBalancesResult.error}`);
-        }
+        // Note: Appraisals and leave management seeds are disabled for now
+        // They need to be updated to match the current database schema
+        // Focus is on onboarding system functionality
 
         return seedResults;
       },
@@ -1446,3 +1973,33 @@ export async function seed(options?: {
  * Default export: seed function
  */
 export default seed;
+
+/**
+ * Execute seed if run directly
+ */
+const isMainModule = import.meta.url.endsWith(process.argv[1]?.replace(/\\/g, '/') || '');
+if (isMainModule || process.argv[1]?.includes('seed.ts')) {
+  seed({ cleanup: true })
+    .then((result) => {
+      if (result.success) {
+        console.log('\n✅ Database seeding completed successfully!');
+        console.log(`Total execution time: ${result.totalExecutionTimeMs}ms`);
+        console.log(`Total operations: ${result.results.length}`);
+        
+        result.results.forEach((r) => {
+          console.log(`  - ${r.metadata.name}: ${r.recordsCreated} created, ${r.recordsUpdated} updated`);
+        });
+        
+        process.exit(0);
+      } else {
+        console.error('\n❌ Database seeding failed!');
+        console.error(`Error: ${result.error}`);
+        process.exit(1);
+      }
+    })
+    .catch((error) => {
+      console.error('\n❌ Database seeding crashed!');
+      console.error(error);
+      process.exit(1);
+    });
+}

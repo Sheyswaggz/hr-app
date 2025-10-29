@@ -138,7 +138,7 @@ export const AppraisalForm: React.FC<AppraisalFormProps> = ({
         timestamp: new Date().toISOString(),
       });
 
-      const response = await apiClient.get<{ data: Employee[] }>('/api/employees/team');
+      const response = await apiClient.get<{ data: Employee[] }>('/employees/team');
       
       setEmployees(response.data.data);
       
@@ -435,7 +435,8 @@ export const AppraisalForm: React.FC<AppraisalFormProps> = ({
           value={selectedEmployee}
           onChange={(_, newValue) => {
             setSelectedEmployee(newValue);
-            setFormErrors(prev => ({ ...prev, employee: undefined }));
+            const { employee, ...rest } = formErrors;
+            setFormErrors(rest);
           }}
           loading={loadingEmployees}
           disabled={isSubmitting || loadingEmployees}
@@ -474,7 +475,8 @@ export const AppraisalForm: React.FC<AppraisalFormProps> = ({
           value={reviewPeriodStart}
           onChange={(e) => {
             setReviewPeriodStart(e.target.value);
-            setFormErrors(prev => ({ ...prev, reviewPeriodStart: undefined }));
+            const { reviewPeriodStart: _, ...rest } = formErrors;
+            setFormErrors(rest);
           }}
           required
           fullWidth
@@ -501,7 +503,8 @@ export const AppraisalForm: React.FC<AppraisalFormProps> = ({
           value={reviewPeriodEnd}
           onChange={(e) => {
             setReviewPeriodEnd(e.target.value);
-            setFormErrors(prev => ({ ...prev, reviewPeriodEnd: undefined }));
+            const { reviewPeriodEnd: _, ...rest } = formErrors;
+            setFormErrors(rest);
           }}
           required
           fullWidth

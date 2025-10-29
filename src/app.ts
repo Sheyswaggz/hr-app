@@ -6,6 +6,7 @@ import { authRouter } from './routes/auth.routes.js';
 import { onboardingRouter } from './routes/onboarding.routes.js';
 import { appraisalRouter } from './routes/appraisal.routes.js';
 import { leaveRouter } from './routes/leave.routes.js';
+import { employeeRouter } from './routes/employee.routes.js';
 import { swaggerSpec } from './config/swagger';
 
 /**
@@ -21,7 +22,10 @@ export function createApp(): Express {
   const app = express();
 
   // Middleware
-  app.use(cors());
+  app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    credentials: true,
+  }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -57,6 +61,7 @@ export function createApp(): Express {
   app.use('/api/onboarding', onboardingRouter);
   app.use('/api/appraisals', appraisalRouter);
   app.use('/api/leave', leaveRouter);
+  app.use('/api/employees', employeeRouter);
 
   // 404 handler
   app.use((req: Request, res: Response) => {
