@@ -276,45 +276,25 @@ export class AppraisalController {
     next: NextFunction,
   ): Promise<void> {
     try {
-      const { managerId } = req.params;
-      const { cycleId, status } = req.query;
+      // Get the authenticated user's ID
+      const requestingUserId = req.user!.userId;
 
-      // Authorization check: managers can only view appraisals they manage
-      const requestingUserId = req.user!.id;
-      const requestingUserRole = req.user!.role;
+      // For managers, fetch their team's appraisals
+      const result = await appraisalService.getTeamAppraisals(
+        requestingUserId
+      );
 
-      if (
-        requestingUserRole === 'manager' &&
-        requestingUserId !== parseInt(managerId, 10)
-      ) {
-        res.status(403).json({
+      if (!result.success) {
+        res.status(400).json({
           success: false,
-          message: 'You can only view appraisals you manage',
+          message: result.error || 'Failed to fetch team appraisals',
         });
         return;
       }
 
-      const filters: {
-        cycleId?: number;
-        status?: AppraisalStatus;
-      } = {};
-
-      if (cycleId) {
-        filters.cycleId = parseInt(cycleId as string, 10);
-      }
-
-      if (status) {
-        filters.status = status as AppraisalStatus;
-      }
-
-      const appraisals = await appraisalService.getManagerAppraisals(
-        parseInt(managerId, 10),
-        filters,
-      );
-
       res.status(200).json({
         success: true,
-        data: appraisals,
+        data: result.data || [],
       });
     } catch (error) {
       next(error);

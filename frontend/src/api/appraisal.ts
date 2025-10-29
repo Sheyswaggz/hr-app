@@ -265,7 +265,7 @@ export async function getTeamAppraisals(): Promise<Appraisal[]> {
     });
 
     const response = await apiClient.get<ApiSuccessResponse<Appraisal[]>>(
-      '/appraisals/team-appraisals'
+      '/appraisals/team'
     );
 
     console.debug('[Appraisal API] Team appraisals fetched successfully', {

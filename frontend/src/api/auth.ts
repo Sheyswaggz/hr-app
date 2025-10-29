@@ -57,6 +57,20 @@ export interface AuthResponse {
 }
 
 /**
+ * Backend login response structure
+ */
+interface BackendAuthResponse {
+  success: boolean;
+  message: string;
+  tokens: {
+    accessToken: string;
+    refreshToken: string;
+  };
+  user: User;
+  timestamp: string;
+}
+
+/**
  * Token refresh request
  */
 export interface RefreshTokenRequest {
@@ -146,18 +160,26 @@ export async function login(email: string, password: string): Promise<AuthRespon
     };
 
     // Make API request
-    const response = await apiClient.post<ApiSuccessResponse<AuthResponse>>(
+    const response = await apiClient.post<BackendAuthResponse>(
       '/auth/login',
       credentials
     );
 
-    const authData = response.data.data;
+    const backendData = response.data;
 
     // Validate response structure
-    if (!authData || !authData.user || !authData.accessToken || !authData.refreshToken) {
+    if (!backendData || !backendData.success || !backendData.tokens || !backendData.user) {
       console.error('[Auth API] Invalid response structure:', response.data);
       throw new Error('Invalid authentication response from server');
     }
+
+    // Transform to expected format
+    const authData: AuthResponse = {
+      user: backendData.user,
+      accessToken: backendData.tokens.accessToken,
+      refreshToken: backendData.tokens.refreshToken,
+      expiresIn: 24 * 60 * 60, // 24 hours in seconds
+    };
 
     // Store tokens
     storeAuthTokens(authData.accessToken, authData.refreshToken);
@@ -258,18 +280,26 @@ export async function refreshToken(): Promise<AuthResponse> {
     };
 
     // Make API request
-    const response = await apiClient.post<ApiSuccessResponse<AuthResponse>>(
+    const response = await apiClient.post<BackendAuthResponse>(
       '/auth/refresh',
       refreshRequest
     );
 
-    const authData = response.data.data;
+    const backendData = response.data;
 
     // Validate response structure
-    if (!authData || !authData.user || !authData.accessToken || !authData.refreshToken) {
+    if (!backendData || !backendData.success || !backendData.tokens || !backendData.user) {
       console.error('[Auth API] Invalid refresh response structure:', response.data);
       throw new Error('Invalid token refresh response from server');
     }
+
+    // Transform to expected format
+    const authData: AuthResponse = {
+      user: backendData.user,
+      accessToken: backendData.tokens.accessToken,
+      refreshToken: backendData.tokens.refreshToken,
+      expiresIn: 24 * 60 * 60, // 24 hours in seconds
+    };
 
     // Store new tokens
     storeAuthTokens(authData.accessToken, authData.refreshToken);

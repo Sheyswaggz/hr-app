@@ -127,6 +127,7 @@ export function useOnboardingTemplates(): UseOnboardingTemplatesReturn {
 
   // Cleanup on unmount
   useEffect(() => {
+    isMountedRef.current = true; // Ensure it's set to true on mount
     return () => {
       isMountedRef.current = false;
     };
@@ -154,6 +155,18 @@ export function useOnboardingTemplates(): UseOnboardingTemplatesReturn {
       }
 
       const fetchedTemplates = await getTemplates();
+
+      console.log('[useOnboardingTemplates] Templates received:', {
+        count: fetchedTemplates.length,
+        templates: fetchedTemplates,
+      });
+
+      console.log('[useOnboardingTemplates] About to update state with:', {
+        templates: fetchedTemplates,
+        loading: false,
+        error: null,
+        initialized: true,
+      });
 
       safeSetState({
         templates: fetchedTemplates,
@@ -385,10 +398,11 @@ export function useOnboardingTemplates(): UseOnboardingTemplatesReturn {
     }
   }, [fetchTemplates, handleCreateTemplate, handleUpdateTemplate, handleDeleteTemplate]);
 
-  // Fetch templates on mount
+  // Fetch templates on mount only
   useEffect(() => {
     fetchTemplates();
-  }, [fetchTemplates]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array - only run on mount
 
   return {
     templates: state.templates,

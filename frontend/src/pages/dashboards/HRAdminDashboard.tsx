@@ -34,12 +34,14 @@ import {
   EventNote as EventNoteIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import DashboardLayout from '../../layouts/DashboardLayout';
 import TemplateList from '../../components/onboarding/TemplateList';
 import TeamProgressDashboard from '../../components/onboarding/TeamProgressDashboard';
+import TemplateForm from '../../components/onboarding/TemplateForm';
 import AppraisalList from '../../components/appraisal/AppraisalList';
+import AppraisalForm from '../../components/appraisal/AppraisalForm';
 import { useAppraisals } from '../../hooks/useAppraisals';
 import { AppraisalStatus } from '../../types/appraisal';
+import { Template } from '../../api/onboarding';
 
 /**
  * HR Admin Dashboard Component
@@ -53,14 +55,16 @@ import { AppraisalStatus } from '../../types/appraisal';
  * ```
  */
 const HRAdminDashboard: React.FC = () => {
+  console.log("hr admin d")
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'onboarding' | 'appraisals'>('onboarding');
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [templateDialogMode, setTemplateDialogMode] = useState<'create' | 'edit'>('create');
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [appraisalDialogOpen, setAppraisalDialogOpen] = useState(false);
 
   // Fetch all appraisals for metrics
-  const { appraisals } = useAppraisals({
-    view: 'all',
-    fetchOnMount: true,
-  });
+  const appraisals = [];
 
   // Calculate appraisal metrics
   const appraisalMetrics = React.useMemo(() => {
@@ -76,34 +80,71 @@ const HRAdminDashboard: React.FC = () => {
    * Handle navigation to create new template
    */
   const handleCreateTemplate = () => {
-    console.info('[HRAdminDashboard] Navigating to create template', {
-      timestamp: new Date().toISOString(),
-    });
-    navigate('/onboarding/templates/new');
+    setTemplateDialogMode('create');
+    setSelectedTemplate(null);
+    setTemplateDialogOpen(true);
+  };
+
+  /**
+   * Handle editing a template
+   */
+  const handleEditTemplate = (template: Template) => {
+    setTemplateDialogMode('edit');
+    setSelectedTemplate(template);
+    setTemplateDialogOpen(true);
+  };
+
+  /**
+   * Handle template dialog close
+   */
+  const handleTemplateDialogClose = () => {
+    setTemplateDialogOpen(false);
+    setSelectedTemplate(null);
+  };
+
+  /**
+   * Handle template form success
+   */
+  const handleTemplateSuccess = async (data: any) => {
+    // The form will handle the API call
+    // Just close the dialog and refresh the list
+    handleTemplateDialogClose();
   };
 
   /**
    * Handle navigation to create new appraisal
    */
   const handleCreateAppraisal = () => {
-    console.info('[HRAdminDashboard] Navigating to create appraisal', {
-      timestamp: new Date().toISOString(),
-    });
-    navigate('/appraisals/new');
+    setAppraisalDialogOpen(true);
+  };
+
+  /**
+   * Handle appraisal dialog close
+   */
+  const handleAppraisalDialogClose = () => {
+    setAppraisalDialogOpen(false);
+  };
+
+  /**
+   * Handle appraisal creation success
+   */
+  const handleAppraisalSuccess = (appraisalId: string) => {
+    console.log('[HRAdminDashboard] Appraisal created successfully:', appraisalId);
+    handleAppraisalDialogClose();
+    // The appraisal list will refresh automatically
   };
 
   return (
-    <DashboardLayout>
-      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-        {/* Header */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" component="h1" gutterBottom>
-            HR Admin Dashboard
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Manage onboarding workflows, performance appraisals, and employee operations
-          </Typography>
-        </Box>
+    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+      {/* Header */}
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          HR Admin Dashboard
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          Manage onboarding workflows, performance appraisals, and employee operations
+        </Typography>
+      </Box>
 
         {/* Quick Actions */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -213,22 +254,10 @@ const HRAdminDashboard: React.FC = () => {
           <Grid container spacing={3}>
             {/* Onboarding Templates */}
             <Grid item xs={12} lg={6}>
-              <Paper sx={{ p: 3 }}>
-                <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="h6" component="h2">
-                    Onboarding Templates
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={handleCreateTemplate}
-                    size="small"
-                  >
-                    Create Template
-                  </Button>
-                </Box>
-                <TemplateList />
-              </Paper>
+              <TemplateList 
+                onCreateClick={handleCreateTemplate}
+                onEditClick={handleEditTemplate}
+              />
             </Grid>
 
             {/* Team Progress */}
@@ -317,8 +346,32 @@ const HRAdminDashboard: React.FC = () => {
             </Grid>
           </Grid>
         )}
-      </Container>
-    </DashboardLayout>
+
+        {/* Template Form Dialog */}
+        <TemplateForm
+          open={templateDialogOpen}
+          mode={templateDialogMode}
+          initialData={selectedTemplate ? {
+            id: selectedTemplate.id,
+            name: selectedTemplate.name,
+            description: selectedTemplate.description,
+            tasks: selectedTemplate.tasks.map(task => ({
+              title: task.title,
+              description: task.description,
+              dueDate: task.daysUntilDue,
+            })),
+          } : undefined}
+          onSuccess={handleTemplateSuccess}
+          onClose={handleTemplateDialogClose}
+        />
+
+        {/* Appraisal Form Dialog */}
+        <AppraisalForm
+          open={appraisalDialogOpen}
+          onClose={handleAppraisalDialogClose}
+          onSuccess={handleAppraisalSuccess}
+        />
+    </Container>
   );
 };
 

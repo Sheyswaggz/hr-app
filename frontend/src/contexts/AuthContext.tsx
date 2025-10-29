@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
+import * as authApi from '../api/auth';
 
 /**
  * User role enumeration matching backend UserRole
@@ -34,18 +35,6 @@ interface TokenPayload {
 }
 
 /**
- * Login response from backend API
- */
-interface LoginResponse {
-  success: boolean;
-  tokens: {
-    accessToken: string;
-    refreshToken: string;
-  };
-  user: User;
-}
-
-/**
  * Authentication context value interface
  */
 interface AuthContextValue {
@@ -65,17 +54,12 @@ interface AuthProviderProps {
 }
 
 /**
- * Storage keys for tokens
+ * Storage keys for tokens (kept for compatibility with auth.ts)
  */
 const STORAGE_KEYS = {
-  ACCESS_TOKEN: 'hr_app_access_token',
-  REFRESH_TOKEN: 'hr_app_refresh_token',
+  ACCESS_TOKEN: 'auth_token',
+  REFRESH_TOKEN: 'refresh_token',
 } as const;
-
-/**
- * API base URL from environment variables
- */
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
 
 /**
  * Authentication context
@@ -167,7 +151,7 @@ const isTokenExpired = (token: string): boolean => {
   const currentTime = Math.floor(Date.now() / 1000);
   const isExpired = payload.exp < currentTime;
   
-  if (isExpired && import.meta.env.DEV) {
+  if (isExpired) {
     console.warn('[AuthContext] Token expired:', {
       expiredAt: new Date(payload.exp * 1000).toISOString(),
       currentTime: new Date(currentTime * 1000).toISOString(),
@@ -226,6 +210,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    */
   const loadUserFromToken = useCallback(async (): Promise<void> => {
     try {
+      // Check if user is authenticated using auth API
+      if (!authApi.isAuthenticated()) {
+        console.log('[AuthContext] No authentication tokens found in storage');
+        setIsLoading(false);
+        return;
+      }
+
       const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
       
       if (!accessToken) {
@@ -236,7 +227,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (isTokenExpired(accessToken)) {
         console.log('[AuthContext] Access token expired, attempting refresh');
-        await refreshToken();
+        try {
+          await refreshToken();
+        } catch (refreshError) {
+          console.error('[AuthContext] Failed to refresh token on load');
+          setIsLoading(false);
+        }
         return;
       }
 
@@ -288,45 +284,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       console.log('[AuthContext] Attempting login:', { email });
       
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Login failed' }));
-        console.error('[AuthContext] Login failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData,
-        });
-        throw new Error(errorData.message || `Login failed: ${response.statusText}`);
-      }
-
-      const data: LoginResponse = await response.json();
+      // Use the auth API service which properly handles the response
+      const authResponse = await authApi.login(email, password);
       
-      if (!data.tokens?.accessToken || !data.tokens?.refreshToken || !data.user) {
-        console.error('[AuthContext] Invalid login response:', {
-          hasTokens: !!data.tokens,
-          hasAccessToken: !!data.tokens?.accessToken,
-          hasRefreshToken: !!data.tokens?.refreshToken,
-          hasUser: !!data.user,
-        });
-        throw new Error('Invalid response from server');
-      }
-
-      localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.tokens.accessToken);
-      localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.tokens.refreshToken);
-      
-      setUser(data.user);
+      setUser(authResponse.user);
       
       console.log('[AuthContext] Login successful:', {
-        userId: data.user.id,
-        email: data.user.email,
-        role: data.user.role,
+        userId: authResponse.user.id,
+        email: authResponse.user.email,
+        role: authResponse.user.role,
       });
     } catch (error) {
       console.error('[AuthContext] Login error:', {
@@ -354,26 +320,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       console.log('[AuthContext] Logging out user:', { userId: user?.id });
       
-      const accessToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+      // Use the auth API service
+      await authApi.logout();
       
-      if (accessToken) {
-        try {
-          await fetch(`${API_BASE_URL}/auth/logout`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-            },
-          });
-        } catch (error) {
-          console.warn('[AuthContext] Logout API call failed (continuing with local logout):', {
-            error: error instanceof Error ? error.message : 'Unknown error',
-          });
-        }
-      }
-
-      localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
-      localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
       setUser(null);
       
       console.log('[AuthContext] Logout successful');
@@ -382,6 +331,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
       });
+      // Even on error, clear the user state
+      setUser(null);
       throw error;
     }
   }, [user?.id]);
@@ -403,74 +354,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    */
   const refreshToken = useCallback(async (): Promise<void> => {
     try {
-      const storedRefreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
-      
-      if (!storedRefreshToken) {
-        console.error('[AuthContext] No refresh token available');
-        throw new Error('No refresh token available');
-      }
-
-      if (isTokenExpired(storedRefreshToken)) {
-        console.error('[AuthContext] Refresh token expired');
-        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
-        localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-        setUser(null);
-        throw new Error('Refresh token expired');
-      }
-
       console.log('[AuthContext] Refreshing access token');
 
-      const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refreshToken: storedRefreshToken }),
-      });
+      // Use the auth API service
+      const authResponse = await authApi.refreshToken();
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Token refresh failed' }));
-        console.error('[AuthContext] Token refresh failed:', {
-          status: response.status,
-          statusText: response.statusText,
-          error: errorData,
-        });
-        
-        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
-        localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
-        setUser(null);
-        
-        throw new Error(errorData.message || 'Token refresh failed');
-      }
-
-      const data: { accessToken: string; refreshToken: string } = await response.json();
+      setUser(authResponse.user);
       
-      if (!data.accessToken || !data.refreshToken) {
-        console.error('[AuthContext] Invalid refresh response:', {
-          hasAccessToken: !!data.accessToken,
-          hasRefreshToken: !!data.refreshToken,
-        });
-        throw new Error('Invalid refresh response');
-      }
-
-      localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.accessToken);
-      localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.refreshToken);
-
-      const userData = getUserFromToken(data.accessToken);
-      if (userData) {
-        setUser(userData);
-        console.log('[AuthContext] Token refresh successful:', {
-          userId: userData.id,
-          email: userData.email,
-        });
-      } else {
-        throw new Error('Failed to extract user from refreshed token');
-      }
+      console.log('[AuthContext] Token refresh successful:', {
+        userId: authResponse.user.id,
+        email: authResponse.user.email,
+      });
     } catch (error) {
       console.error('[AuthContext] Token refresh error:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
       });
+      setUser(null);
       throw error;
     }
   }, []);

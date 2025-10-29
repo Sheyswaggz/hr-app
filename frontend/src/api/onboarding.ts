@@ -38,8 +38,9 @@ export enum WorkflowStatus {
 export interface TemplateTask {
   readonly title: string;
   readonly description: string;
-  readonly dueInDays: number;
+  readonly daysUntilDue: number;
   readonly order: number;
+  readonly requiresDocument?: boolean;
 }
 
 /**
@@ -255,7 +256,7 @@ export async function createTemplate(data: CreateTemplateRequest): Promise<Templ
         throw new Error('Task description must not exceed 2000 characters');
       }
 
-      if (typeof task.dueInDays !== 'number' || task.dueInDays < 1) {
+      if (typeof task.daysUntilDue !== 'number' || task.daysUntilDue < 1) {
         throw new Error('Task due date must be at least 1 day in the future');
       }
 
@@ -332,7 +333,7 @@ export async function updateTemplate(
           throw new Error('Task description must not exceed 2000 characters');
         }
 
-        if (typeof task.dueInDays !== 'number' || task.dueInDays < 1) {
+        if (typeof task.daysUntilDue !== 'number' || task.daysUntilDue < 1) {
           throw new Error('Task due date must be at least 1 day in the future');
         }
 

@@ -190,7 +190,7 @@ export class AppraisalService {
 
       // Fetch employee details for email notification
       const employee = await queryOne<EmployeeRecord>(
-        `SELECT e.id, e.user_id, e.manager_id, u.first_name, u.last_name, u.email, e.job_title
+        `SELECT e.id, e.user_id, e.manager_id, u.first_name, u.last_name, u.email, e.position as job_title
          FROM employees e
          JOIN users u ON e.user_id = u.id
          WHERE e.id = $1`,
@@ -594,7 +594,7 @@ export class AppraisalService {
                 eu.first_name as employee_first_name,
                 eu.last_name as employee_last_name,
                 eu.email as employee_email,
-                e.job_title as employee_job_title,
+                e.position as employee_job_title,
                 ru.first_name as reviewer_first_name,
                 ru.last_name as reviewer_last_name,
                 ru.email as reviewer_email
@@ -742,7 +742,7 @@ export class AppraisalService {
                 eu.first_name as employee_first_name,
                 eu.last_name as employee_last_name,
                 eu.email as employee_email,
-                e.job_title as employee_job_title,
+                e.position as employee_job_title,
                 ru.first_name as reviewer_first_name,
                 ru.last_name as reviewer_last_name,
                 ru.email as reviewer_email
@@ -898,7 +898,7 @@ export class AppraisalService {
                 eu.first_name as employee_first_name,
                 eu.last_name as employee_last_name,
                 eu.email as employee_email,
-                e.job_title as employee_job_title,
+                e.position as employee_job_title,
                 ru.first_name as reviewer_first_name,
                 ru.last_name as reviewer_last_name,
                 ru.email as reviewer_email
@@ -1754,6 +1754,17 @@ export class AppraisalService {
         executionTimeMs,
       };
     }
+  }
+
+  /**
+   * Get appraisal cycles (alias for getAllAppraisals for backward compatibility)
+   * 
+   * @param {any} [filters] - Optional filters
+   * @returns {Promise<AppraisalSummary[]>>} Appraisal summaries
+   */
+  async getAppraisalCycles(filters?: any): Promise<AppraisalSummary[]> {
+    const result = await this.getAllAppraisals(1, 100);
+    return result.data?.appraisals || [];
   }
 }
 
