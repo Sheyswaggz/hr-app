@@ -1,20 +1,20 @@
 /**
- * Manager Dashboard Component
+ * ManagerDashboard Component
  * 
- * Main dashboard for managers to view team metrics, leave requests, and onboarding progress.
- * Provides overview of team performance, pending approvals, and onboarding status.
+ * Dashboard for managers to view team metrics, manage onboarding workflows,
+ * and handle performance appraisals.
  * 
  * Features:
- * - Team metrics overview
- * - Pending leave requests
- * - Team onboarding progress tracking
- * - Quick action buttons
+ * - Team progress overview
+ * - Onboarding workflow management
+ * - Performance appraisal management
+ * - Pending reviews tracking
  * - Responsive layout
  * 
  * @module pages/dashboards/ManagerDashboard
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Container,
@@ -27,12 +27,16 @@ import {
 } from '@mui/material';
 import {
   People as PeopleIcon,
-  EventAvailable as EventAvailableIcon,
   Assignment as AssignmentIcon,
-  TrendingUp as TrendingUpIcon,
+  CheckCircle as CheckCircleIcon,
+  Add as AddIcon,
+  RateReview as RateReviewIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { TeamProgressDashboard } from '../../components/onboarding/TeamProgressDashboard';
+import { WorkflowAssignment } from '../../components/onboarding/WorkflowAssignment';
+import { AppraisalList } from '../../components/appraisal/AppraisalList';
+import { AppraisalForm } from '../../components/appraisal/AppraisalForm';
+import { useAppraisals } from '../../hooks/useAppraisals';
 
 /**
  * Metric card component for displaying key statistics
@@ -40,46 +44,35 @@ import { TeamProgressDashboard } from '../../components/onboarding/TeamProgressD
 interface MetricCardProps {
   readonly title: string;
   readonly value: string | number;
-  readonly icon: React.ReactElement;
-  readonly color: string;
-  readonly subtitle?: string;
+  readonly icon: React.ReactNode;
+  readonly color?: 'primary' | 'secondary' | 'success' | 'warning' | 'error';
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({
-  title,
-  value,
-  icon,
-  color,
-  subtitle,
-}) => (
+const MetricCard: React.FC<MetricCardProps> = ({ title, value, icon, color = 'primary' }) => (
   <Card>
     <CardContent>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+      <Box display="flex" alignItems="center" justifyContent="space-between">
+        <Box>
+          <Typography color="textSecondary" gutterBottom variant="body2">
+            {title}
+          </Typography>
+          <Typography variant="h4" component="div">
+            {value}
+          </Typography>
+        </Box>
         <Box
           sx={{
-            backgroundColor: `${color}15`,
-            borderRadius: 2,
-            p: 1,
-            mr: 2,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            width: 56,
+            height: 56,
+            borderRadius: '50%',
+            bgcolor: `${color}.light`,
+            color: `${color}.main`,
           }}
         >
-          {React.cloneElement(icon, { sx: { color, fontSize: 32 } })}
-        </Box>
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            {title}
-          </Typography>
-          <Typography variant="h4" fontWeight="bold">
-            {value}
-          </Typography>
-          {subtitle && (
-            <Typography variant="caption" color="text.secondary">
-              {subtitle}
-            </Typography>
-          )}
+          {icon}
         </Box>
       </Box>
     </CardContent>
@@ -87,146 +80,143 @@ const MetricCard: React.FC<MetricCardProps> = ({
 );
 
 /**
- * Manager Dashboard Component
+ * ManagerDashboard Component
  * 
- * Main dashboard view for managers with team metrics and onboarding progress.
- * Displays key performance indicators and team onboarding status.
+ * Main dashboard view for managers with team overview, onboarding management,
+ * and performance appraisal features.
  * 
- * @example
- * ```tsx
- * <ManagerDashboard />
- * ```
+ * @returns Rendered ManagerDashboard component
  */
 export const ManagerDashboard: React.FC = () => {
-  const navigate = useNavigate();
+  const [showWorkflowAssignment, setShowWorkflowAssignment] = useState(false);
+  const [showAppraisalForm, setShowAppraisalForm] = useState(false);
+
+  // Fetch team appraisals for pending reviews count
+  const { appraisals } = useAppraisals({
+    view: 'team',
+    fetchOnMount: true,
+  });
+
+  // Calculate pending reviews count (appraisals in submitted status awaiting manager review)
+  const pendingReviewsCount = React.useMemo(() => {
+    return appraisals.filter(appraisal => appraisal.status === 'submitted').length;
+  }, [appraisals]);
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* Header */}
+    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" fontWeight="bold" gutterBottom>
+        <Typography variant="h4" component="h1" gutterBottom>
           Manager Dashboard
         </Typography>
         <Typography variant="body1" color="text.secondary">
-          Overview of your team's performance and onboarding progress
+          Manage your team's onboarding and performance
         </Typography>
       </Box>
 
-      {/* Metrics Grid */}
+      {/* Metrics Overview */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
             title="Team Members"
-            value={12}
+            value="12"
             icon={<PeopleIcon />}
-            color="#1976d2"
-            subtitle="Active employees"
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricCard
-            title="Pending Approvals"
-            value={5}
-            icon={<EventAvailableIcon />}
-            color="#ed6c02"
-            subtitle="Leave requests"
+            color="primary"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
             title="Active Onboarding"
-            value={3}
+            value="3"
             icon={<AssignmentIcon />}
-            color="#9c27b0"
-            subtitle="In progress"
+            color="secondary"
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <MetricCard
-            title="Team Performance"
-            value="92%"
-            icon={<TrendingUpIcon />}
-            color="#2e7d32"
-            subtitle="Average completion"
+            title="Completed Tasks"
+            value="45"
+            icon={<CheckCircleIcon />}
+            color="success"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricCard
+            title="Pending Reviews"
+            value={pendingReviewsCount}
+            icon={<RateReviewIcon />}
+            color="warning"
           />
         </Grid>
       </Grid>
 
-      {/* Quick Actions */}
-      <Paper sx={{ p: 3, mb: 4 }}>
-        <Typography variant="h6" fontWeight="medium" gutterBottom>
-          Quick Actions
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 2 }}>
-          <Button
-            variant="contained"
-            startIcon={<EventAvailableIcon />}
-            onClick={() => navigate('/leave/approvals')}
-          >
-            Review Leave Requests
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<AssignmentIcon />}
-            onClick={() => navigate('/onboarding/team')}
-          >
-            View Team Onboarding
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<PeopleIcon />}
-            onClick={() => navigate('/team')}
-          >
-            Manage Team
-          </Button>
-        </Box>
-      </Paper>
-
-      {/* Team Onboarding Progress Section */}
-      <Box sx={{ mb: 4 }}>
-        <TeamProgressDashboard
-          title="Team Onboarding Progress"
-          height={600}
-          onRowClick={(employeeId) => {
-            if (import.meta.env.VITE_API_DEBUG === 'true') {
-              console.debug('[ManagerDashboard] Employee row clicked', {
-                employeeId,
-                timestamp: new Date().toISOString(),
-              });
-            }
-            navigate(`/employee/${employeeId}/onboarding`);
-          }}
-        />
-      </Box>
-
-      {/* Additional Sections Placeholder */}
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, minHeight: 300 }}>
-            <Typography variant="h6" fontWeight="medium" gutterBottom>
-              Recent Activity
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Team activity feed will be displayed here
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, minHeight: 300 }}>
-            <Typography variant="h6" fontWeight="medium" gutterBottom>
-              Upcoming Events
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Team calendar and events will be displayed here
-            </Typography>
+      {/* Team Progress Section */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12}>
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="h6" component="h2">
+                Team Onboarding Progress
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setShowWorkflowAssignment(true)}
+              >
+                Assign Workflow
+              </Button>
+            </Box>
+            <TeamProgressDashboard />
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Performance Appraisal Section */}
+      <Grid container spacing={3}>
+        <Grid item xs={12}>
+          <Paper sx={{ p: 3 }}>
+            <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="h6" component="h2">
+                Team Appraisals
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setShowAppraisalForm(true)}
+              >
+                Initiate Appraisal
+              </Button>
+            </Box>
+            <AppraisalList
+              variant="team"
+              enableFilters
+              enableSorting
+              enablePagination
+              initialPageSize={10}
+            />
+          </Paper>
+        </Grid>
+      </Grid>
+
+      {/* Workflow Assignment Dialog */}
+      <WorkflowAssignment
+        open={showWorkflowAssignment}
+        onClose={() => setShowWorkflowAssignment(false)}
+      />
+
+      {/* Appraisal Form Dialog */}
+      <AppraisalForm
+        open={showAppraisalForm}
+        onClose={() => setShowAppraisalForm(false)}
+        onSuccess={(appraisalId) => {
+          console.info('[ManagerDashboard] Appraisal created successfully', {
+            appraisalId,
+            timestamp: new Date().toISOString(),
+          });
+          setShowAppraisalForm(false);
+        }}
+      />
     </Container>
   );
 };
 
-/**
- * Export component as default
- */
 export default ManagerDashboard;
